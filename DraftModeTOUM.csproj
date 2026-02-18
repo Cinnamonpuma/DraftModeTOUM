@@ -1,0 +1,527 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{249882E5-4D80-41B0-9340-D897A63CC3E5}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>DraftModeTOUM</RootNamespace>
+    <AssemblyName>DraftModeTOUM</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <Deterministic>true</Deterministic>
+    <LangVersion>10.0</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AddressablesPlayAssetDelivery">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\AddressablesPlayAssetDelivery.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AmongUsCaching">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\AmongUsCaching.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AsmResolver">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\AsmResolver.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AsmResolver.DotNet">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\AsmResolver.DotNet.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AsmResolver.PE">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\AsmResolver.PE.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AsmResolver.PE.File">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\AsmResolver.PE.File.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Assembly-CSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp-firstpass">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Assembly-CSharp-firstpass.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AssetRipper.CIL">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\AssetRipper.CIL.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AssetRipper.Primitives">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\AssetRipper.Primitives.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="BepInEx.Core">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\BepInEx.Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="BepInEx.Preloader.Core">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\BepInEx.Preloader.Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="BepInEx.Unity.Common">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\BepInEx.Unity.Common.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="BepInEx.Unity.IL2CPP">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\BepInEx.Unity.IL2CPP.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Cpp2IL.Core">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\Cpp2IL.Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="CsvHelper">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\CsvHelper.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Disarm">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\Disarm.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Gee.External.Capstone">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\Gee.External.Capstone.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Hazel">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Hazel.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Iced">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\Iced.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Common">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\Il2CppInterop.Common.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Generator">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\Il2CppInterop.Generator.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.HarmonySupport">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\Il2CppInterop.HarmonySupport.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\Il2CppInterop.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppMono.Security">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Il2CppMono.Security.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Il2Cppmscorlib.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppSystem">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Il2CppSystem.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppSystem.Configuration">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Il2CppSystem.Configuration.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppSystem.Core">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Il2CppSystem.Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppSystem.Data">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Il2CppSystem.Data.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppSystem.Drawing">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Il2CppSystem.Drawing.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppSystem.Net.Http">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Il2CppSystem.Net.Http.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppSystem.Numerics">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Il2CppSystem.Numerics.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppSystem.Runtime.Serialization">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Il2CppSystem.Runtime.Serialization.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppSystem.Xml">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Il2CppSystem.Xml.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppSystem.Xml.Linq">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Il2CppSystem.Xml.Linq.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="io.sentry.unity.runtime">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\io.sentry.unity.runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="LibCpp2IL">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\LibCpp2IL.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MiraAPI">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\plugins\MiraAPI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\Mono.Cecil.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil.Mdb">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\Mono.Cecil.Mdb.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil.Pdb">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\Mono.Cecil.Pdb.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil.Rocks">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\Mono.Cecil.Rocks.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MonoMod.Backports">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\MonoMod.Backports.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MonoMod.ILHelpers">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\MonoMod.ILHelpers.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MonoMod.RuntimeDetour">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\MonoMod.RuntimeDetour.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MonoMod.Utils">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\MonoMod.Utils.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Newtonsoft.Json.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="QRCoder">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\QRCoder.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Reactor">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\plugins\Reactor.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Rewired_Core">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Rewired_Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Rewired_Windows">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Rewired_Windows.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Rewired_Windows_Functions">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Rewired_Windows_Functions.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SemanticVersioning">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\SemanticVersioning.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Sentry">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Sentry.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Sentry.Microsoft.Bcl.AsyncInterfaces">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Sentry.Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Sentry.System.Buffers">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Sentry.System.Buffers.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Sentry.System.Collections.Immutable">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Sentry.System.Collections.Immutable.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Sentry.System.Memory">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Sentry.System.Memory.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Sentry.System.Numerics.Vectors">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Sentry.System.Numerics.Vectors.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Sentry.System.Reflection.Metadata">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Sentry.System.Reflection.Metadata.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Sentry.System.Runtime.CompilerServices.Unsafe">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Sentry.System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Sentry.System.Text.Encodings.Web">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Sentry.System.Text.Encodings.Web.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Sentry.System.Text.Json">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Sentry.System.Text.Json.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Sentry.System.Threading.Tasks.Extensions">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Sentry.System.Threading.Tasks.Extensions.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Sentry.Unity">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Sentry.Unity.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Sentry.Unity.Native">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Sentry.Unity.Native.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="StableNameDotNet">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\StableNameDotNet.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Xml" />
+    <Reference Include="TownOfUsMira">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\plugins\TownOfUsMira.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Addressables">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Unity.Addressables.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Analytics.DataPrivacy">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Unity.Analytics.DataPrivacy.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.ProBuilder">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Unity.ProBuilder.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.ResourceManager">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Unity.ResourceManager.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Services.Analytics">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Unity.Services.Analytics.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Services.Core">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Unity.Services.Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Services.Core.Configuration">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Unity.Services.Core.Configuration.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Services.Core.Device">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Unity.Services.Core.Device.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Services.Core.Environments.Internal">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Unity.Services.Core.Environments.Internal.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Services.Core.Internal">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Unity.Services.Core.Internal.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Services.Core.Registration">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Unity.Services.Core.Registration.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Services.Core.Scheduler">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Unity.Services.Core.Scheduler.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Services.Core.Telemetry">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Unity.Services.Core.Telemetry.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Services.Core.Threading">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Unity.Services.Core.Threading.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\Unity.TextMeshPro.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AccessibilityModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.AccessibilityModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AIModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.AIModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AndroidJNIModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.AndroidJNIModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AnimationModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.AnimationModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AssetBundleModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.AssetBundleModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.AudioModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ClothModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.ClothModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ClusterInputModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.ClusterInputModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ClusterRendererModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.ClusterRendererModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ContentLoadModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.ContentLoadModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CrashReportingModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.CrashReportingModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.DirectorModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.DirectorModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.DSPGraphModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.DSPGraphModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.GameCenterModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.GameCenterModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.GIModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.GIModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.GridModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.GridModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.HotReloadModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.HotReloadModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.ImageConversionModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\UnityEngine.InputModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.JSONSerializeModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.JSONSerializeModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.LocalizationModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.LocalizationModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ParticleSystemModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.ParticleSystemModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PerformanceReportingModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\UnityEngine.PerformanceReportingModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.Physics2DModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\UnityEngine.Physics2DModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\UnityEngine.UI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIElementsModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\UnityEngine.UIElementsModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\UnityEngine.UIModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="WasmDisassembler">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\core\WasmDisassembler.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="__Generated">
+      <HintPath>D:\Games\Among Us\Content\BepInEx\interop\__Generated.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Managers\DraftManager.cs" />
+    <Compile Include="DraftModePlugin.cs" />
+    <Compile Include="Patches\ChatPatch.cs" />
+    <Compile Include="Patches\DraftRpcPatch.cs" />
+    <Compile Include="DraftTicker.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Managers\RoleAssigner.cs" />
+    <Compile Include="Managers\RolePoolBuilder.cs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
