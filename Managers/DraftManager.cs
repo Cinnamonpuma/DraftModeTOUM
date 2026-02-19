@@ -92,8 +92,7 @@ namespace DraftModeTOUM.Managers
             if (!AmongUsClient.Instance.AmHost) return;
             if (AmongUsClient.Instance.GameState != InnerNet.InnerNetClient.GameStates.Joined) return;
             DraftTicker.EnsureExists();
-            Reset();
-            UpCommandRequests.Clear();
+            Reset(cancelledBeforeCompletion: true); // clear any previous draft + old UpCommandRequests
             ApplyLocalSettings();
 
             var players = PlayerControl.AllPlayerControls.ToArray()
@@ -144,7 +143,11 @@ namespace DraftModeTOUM.Managers
             DraftNetworkHelper.BroadcastSlotNotifications(_pidToSlot);
         }
 
-        public static void Reset()
+        // Set to true once ApplyAllRoles has run so disconnect handler knows
+        // NOT to wipe the UpCommandRequests (the game needs them to assign roles).
+        private static bool _rolesApplied = false;
+
+        public static void Reset(bool cancelledBeforeCompletion = true)
         {
             IsDraftActive = false;
             CurrentTurn = 0;
@@ -161,7 +164,21 @@ namespace DraftModeTOUM.Managers
             _soloTestMode = false;
             _impostorsDrafted = 0;
             _neutralsDrafted = 0;
+            // Only wipe UpCommandRequests if we're cancelling before roles were applied.
+            // If ApplyAllRoles() already ran, leave the requests intact so TOU-Mira's
+            // SelectRoles patch can read them when the game actually starts.
+            if (cancelledBeforeCompletion)
+            {
+                UpCommandRequests.Clear();
+                _rolesApplied = false;
+            }
+        }
+
+        /// <summary>Called after the game has fully started to clear any leftover requests.</summary>
+        public static void ClearAppliedRoles()
+        {
             UpCommandRequests.Clear();
+            _rolesApplied = false;
         }
 
         public static void Tick(float deltaTime)
@@ -289,13 +306,18 @@ namespace DraftModeTOUM.Managers
             if (CurrentTurn > TurnOrder.Count)
             {
                 IsDraftActive = false;
-                ApplyAllRoles();
+                ApplyAllRoles();   // populates UpCommandRequests — must happen BEFORE Reset
+                _rolesApplied = true;
                 DraftUiManager.CloseAll();
 
                 if (ShowRecap)
                     DraftNetworkHelper.BroadcastRecap(BuildRecapMessage());
                 else
                     DraftNetworkHelper.BroadcastRecap("<color=#FFD700><b>── DRAFT COMPLETE ──</b></color>");
+
+                // Reset draft state but do NOT clear UpCommandRequests
+                // (TOU-Mira's SelectRoles will read them when the game starts)
+                Reset(cancelledBeforeCompletion: false);
 
                 TryStartGameAfterDraft();
             }
@@ -330,6 +352,10 @@ namespace DraftModeTOUM.Managers
         {
             // Register every drafted role via UpCommandRequests so TOU-Mira's
             // SelectRoles patch honours them when the game actually starts.
+            // UpCommandRequests.TryGetRequest matches by GetRoleName() or ITownOfUsRole.LocaleKey,
+            // so we store the exact display name returned by GetRoleName().
+            var allRoles = RoleManager.Instance?.AllRoles?.ToArray();
+
             foreach (var state in _slotMap.Values)
             {
                 if (state.PlayerId >= 200 || state.ChosenRole == null) continue;
@@ -337,10 +363,29 @@ namespace DraftModeTOUM.Managers
                     .FirstOrDefault(x => x.PlayerId == state.PlayerId);
                 if (p == null) continue;
 
+                // Verify the role name is actually resolvable before registering
+                string roleName = state.ChosenRole;
+                if (allRoles != null)
+                {
+                    var match = allRoles.FirstOrDefault(r =>
+                        r.GetRoleName().Equals(roleName, StringComparison.OrdinalIgnoreCase) ||
+                        r.GetRoleName().Replace(" ", "").Equals(roleName.Replace(" ", ""), StringComparison.OrdinalIgnoreCase));
+                    if (match != null)
+                        roleName = match.GetRoleName(); // use exact canonical name
+                    else
+                        DraftModePlugin.Logger.LogWarning($"[DraftManager] Role '{roleName}' not found in RoleManager — request may not resolve.");
+                }
+
                 DraftModePlugin.Logger.LogInfo(
-                    $"[DraftManager] Queuing role '{state.ChosenRole}' for '{p.Data.PlayerName}'");
-                UpCommandRequests.SetRequest(p.Data.PlayerName, state.ChosenRole);
+                    $"[DraftManager] Queuing role '{roleName}' for player '{p.Data.PlayerName}' (id={p.PlayerId})");
+                UpCommandRequests.SetRequest(p.Data.PlayerName, roleName);
             }
+
+            // Sanity check log
+            var all = UpCommandRequests.GetAllRequests();
+            DraftModePlugin.Logger.LogInfo($"[DraftManager] ApplyAllRoles complete — {all.Count} requests queued for SelectRoles:");
+            foreach (var kvp in all)
+                DraftModePlugin.Logger.LogInfo($"  '{kvp.Key}' => '{kvp.Value}'");
         }
 
         public static void SendChatLocal(string msg)

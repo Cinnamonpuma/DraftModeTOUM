@@ -74,8 +74,26 @@ namespace DraftModeTOUM
         public static void Postfix()
         {
             RequireModPatch.ClearSession();
-            DraftUiManager.CloseAll();
-            DraftModePlugin.Logger.LogInfo("[DraftModePlugin] Session cleared on disconnect.");
+            // If draft was still active (not yet complete), cancel it and clear requests.
+            // If ApplyAllRoles already ran (draft complete, awaiting game start),
+            // preserve UpCommandRequests so SelectRoles can still read them.
+            bool draftStillInProgress = DraftManager.IsDraftActive;
+            DraftManager.Reset(cancelledBeforeCompletion: draftStillInProgress);
+            DraftModePlugin.Logger.LogInfo($"[DraftModePlugin] Session cleared on disconnect (cancelled={draftStillInProgress}).");
+        }
+    }
+
+    // Once the game actually starts, clean up any leftover UpCommandRequests.
+    // TOU-Mira's SelectRoles removes them one-by-one via RemoveRequest as it assigns,
+    // but this is a safety net for any extras.
+    [HarmonyPatch(typeof(GameStartManager), nameof(GameStartManager.BeginGame))]
+    public static class BeginGameCleanupPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix()
+        {
+            // Requests will be consumed by SelectRoles; schedule a cleanup slightly after.
+            DraftModePlugin.Logger.LogInfo("[DraftModePlugin] Game started — UpCommandRequests will be consumed by SelectRoles.");
         }
     }
 }
