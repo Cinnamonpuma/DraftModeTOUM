@@ -1,6 +1,7 @@
 ﻿using AmongUs.GameOptions;
 using DraftModeTOUM.Patches;
 using MiraAPI.LocalSettings;
+using MiraAPI.Utilities;
 using HarmonyLib;
 using System;
 using System.Collections;
@@ -143,10 +144,6 @@ namespace DraftModeTOUM.Managers
             DraftNetworkHelper.BroadcastSlotNotifications(_pidToSlot);
         }
 
-        // Set to true once ApplyAllRoles has run so disconnect handler knows
-        // NOT to wipe the UpCommandRequests (the game needs them to assign roles).
-        private static bool _rolesApplied = false;
-
         public static void Reset(bool cancelledBeforeCompletion = true)
         {
             IsDraftActive = false;
@@ -170,15 +167,7 @@ namespace DraftModeTOUM.Managers
             if (cancelledBeforeCompletion)
             {
                 UpCommandRequests.Clear();
-                _rolesApplied = false;
             }
-        }
-
-        /// <summary>Called after the game has fully started to clear any leftover requests.</summary>
-        public static void ClearAppliedRoles()
-        {
-            UpCommandRequests.Clear();
-            _rolesApplied = false;
         }
 
         public static void Tick(float deltaTime)
@@ -307,7 +296,6 @@ namespace DraftModeTOUM.Managers
             {
                 IsDraftActive = false;
                 ApplyAllRoles();   // populates UpCommandRequests — must happen BEFORE Reset
-                _rolesApplied = true;
                 DraftUiManager.CloseAll();
 
                 if (ShowRecap)
@@ -354,7 +342,9 @@ namespace DraftModeTOUM.Managers
             // SelectRoles patch honours them when the game actually starts.
             // UpCommandRequests.TryGetRequest matches by GetRoleName() or ITownOfUsRole.LocaleKey,
             // so we store the exact display name returned by GetRoleName().
-            var allRoles = RoleManager.Instance?.AllRoles?.ToArray();
+            // MiscUtils.AllRegisteredRoles is the same source UpCommandRequests uses for matching,
+            // so resolving against it gives us the canonical name.
+            var allRoles = MiscUtils.AllRegisteredRoles.ToArray();
 
             foreach (var state in _slotMap.Values)
             {
@@ -363,18 +353,17 @@ namespace DraftModeTOUM.Managers
                     .FirstOrDefault(x => x.PlayerId == state.PlayerId);
                 if (p == null) continue;
 
-                // Verify the role name is actually resolvable before registering
+                // Verify the role name is actually resolvable before registering.
+                // Use NiceName (the base-game property on RoleBehaviour) for matching;
+                // GetRoleName() is a MiraAPI extension that does the same thing.
                 string roleName = state.ChosenRole;
-                if (allRoles != null)
-                {
-                    var match = allRoles.FirstOrDefault(r =>
-                        r.GetRoleName().Equals(roleName, StringComparison.OrdinalIgnoreCase) ||
-                        r.GetRoleName().Replace(" ", "").Equals(roleName.Replace(" ", ""), StringComparison.OrdinalIgnoreCase));
-                    if (match != null)
-                        roleName = match.GetRoleName(); // use exact canonical name
-                    else
-                        DraftModePlugin.Logger.LogWarning($"[DraftManager] Role '{roleName}' not found in RoleManager — request may not resolve.");
-                }
+                var match = allRoles.FirstOrDefault(r =>
+                    r.NiceName.Equals(roleName, StringComparison.OrdinalIgnoreCase) ||
+                    r.NiceName.Replace(" ", "").Equals(roleName.Replace(" ", ""), StringComparison.OrdinalIgnoreCase));
+                if (match != null)
+                    roleName = match.NiceName; // canonical spelling
+                else
+                    DraftModePlugin.Logger.LogWarning($"[DraftManager] Role '{roleName}' not found in AllRegisteredRoles — request may not resolve.");
 
                 DraftModePlugin.Logger.LogInfo(
                     $"[DraftManager] Queuing role '{roleName}' for player '{p.Data.PlayerName}' (id={p.PlayerId})");
