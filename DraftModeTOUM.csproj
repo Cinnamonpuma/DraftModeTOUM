@@ -519,6 +519,7 @@
     <Compile Include="Patches\ChatPatch.cs" />
     <Compile Include="Patches\DraftRpcPatch.cs" />
     <Compile Include="DraftTicker.cs" />
+    <Compile Include="Managers\PresetConfigReader.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Managers\RoleAssigner.cs" />
     <Compile Include="Managers\RolePoolBuilder.cs" />
