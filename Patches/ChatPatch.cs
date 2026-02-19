@@ -10,10 +10,11 @@ namespace DraftModeTOUM.Patches
     public static class ChatPatch
     {
         [HarmonyPrefix]
-        [HarmonyPriority(Priority.First)]
+        [HarmonyPriority(Priority.First + 100)] // Must beat TOU-Mira's Priority.First catch-all
         public static bool Prefix(ChatController __instance)
         {
-            string msg = __instance.freeChatField.textArea.text.Trim();
+            // Use .Text (not .textArea.text) — same property TOU-Mira reads
+            string msg = __instance.freeChatField.Text?.Trim() ?? string.Empty;
             if (string.IsNullOrEmpty(msg)) return true;
 
             if (msg.StartsWith("/draft", System.StringComparison.OrdinalIgnoreCase)
@@ -36,7 +37,7 @@ namespace DraftModeTOUM.Patches
                 {
                     DraftManager.StartDraft();
                 }
-                __instance.freeChatField.textArea.Clear();
+                ClearChat(__instance);
                 return false;
             }
 
@@ -55,7 +56,7 @@ namespace DraftModeTOUM.Patches
                     DraftManager.Reset(cancelledBeforeCompletion: true);
                     DraftManager.SendChatLocal("<color=#FFD700>Draft has been cancelled by the host.</color>");
                 }
-                __instance.freeChatField.textArea.Clear();
+                ClearChat(__instance);
                 return false;
             }
 
@@ -75,11 +76,19 @@ namespace DraftModeTOUM.Patches
                         : "<color=red>OFF</color>";
                     DraftManager.SendChatLocal($"<color=#FFD700>Draft recap is now: {status}</color>");
                 }
-                __instance.freeChatField.textArea.Clear();
+                ClearChat(__instance);
                 return false;
             }
 
             return true;
+        }
+
+        private static void ClearChat(ChatController chat)
+        {
+            chat.freeChatField.Clear();
+            chat.quickChatMenu.Clear();
+            chat.quickChatField.Clear();
+            chat.UpdateChatMode();
         }
     }
 }
