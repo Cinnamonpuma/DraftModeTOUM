@@ -19,8 +19,13 @@ namespace DraftModeTOUM.Managers
             if (HudManager.Instance == null || roles == null || roles.Count == 0) return;
 
             EnsureMinigame();
+            if (_minigame == null)
+            {
+                DraftModePlugin.Logger.LogError("[DraftUiManager] Cannot show picker — minigame failed to create.");
+                return;
+            }
             var cards = BuildCards(roles);
-            _minigame!.Open(cards, OnPickSelected);
+            _minigame.Open(cards, OnPickSelected);
         }
 
         // Called whenever turn state changes so non-pickers still see updated list
@@ -34,8 +39,15 @@ namespace DraftModeTOUM.Managers
         public static void CloseAll()
         {
             if (_minigame == null) return;
-            if (_minigame.gameObject != null && _minigame.gameObject.activeSelf)
-                _minigame.Close();
+            try
+            {
+                if (_minigame.gameObject != null && _minigame.gameObject.activeSelf)
+                    _minigame.Close();
+            }
+            catch (System.Exception ex)
+            {
+                DraftModePlugin.Logger.LogWarning($"[DraftUiManager] CloseAll exception (safe to ignore): {ex.Message}");
+            }
             // Always null the reference so EnsureMinigame recreates it next time
             _minigame = null;
         }
@@ -43,11 +55,20 @@ namespace DraftModeTOUM.Managers
         private static void EnsureMinigame()
         {
             // Treat destroyed Unity objects as null
-            if (_minigame != null && (_minigame.gameObject == null || !_minigame.isActiveAndEnabled == false))
-                _minigame = null;
+            if (_minigame != null)
+            {
+                bool destroyed = false;
+                try { destroyed = (_minigame.gameObject == null); }
+                catch { destroyed = true; }
+                if (destroyed) _minigame = null;
+            }
 
             if (_minigame == null)
+            {
                 _minigame = DraftSelectionMinigame.Create();
+                if (_minigame == null)
+                    DraftModePlugin.Logger.LogError("[DraftUiManager] DraftSelectionMinigame.Create() returned null — asset may not be loaded!");
+            }
         }
 
         private static void OnPickSelected(int index)

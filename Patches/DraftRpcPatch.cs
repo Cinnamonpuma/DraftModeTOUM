@@ -126,9 +126,10 @@ namespace DraftModeTOUM.Patches
 
         public static void BroadcastDraftStart(int totalSlots, List<byte> pids, List<int> slots)
         {
-
+            // Do NOT call DraftUiManager.CloseAll() here for the host — the
+            // picker UI is opened immediately after this call in OfferRolesToCurrentPicker.
+            // Calling CloseAll() here would race/cancel that open.
             DraftManager.SetDraftStateFromHost(totalSlots, pids, slots);
-            DraftUiManager.CloseAll();
 
 
             var writer = AmongUsClient.Instance.StartRpcImmediately(

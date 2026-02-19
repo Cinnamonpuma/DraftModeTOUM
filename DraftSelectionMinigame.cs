@@ -83,9 +83,20 @@ public sealed class DraftSelectionMinigame : Minigame
         TurnListText.gameObject.SetActive(false);
     }
 
-    public static DraftSelectionMinigame Create()
+    public static DraftSelectionMinigame? Create()
     {
-        var go = Instantiate(TouAssets.AltRoleSelectionGame.LoadAsset(), HudManager.Instance.transform);
+        var prefab = TouAssets.AltRoleSelectionGame.LoadAsset();
+        if (prefab == null)
+        {
+            DraftModePlugin.Logger.LogError("[DraftSelectionMinigame] TouAssets.AltRoleSelectionGame.LoadAsset() returned null — asset bundle not ready yet!");
+            return null;
+        }
+        if (HudManager.Instance == null)
+        {
+            DraftModePlugin.Logger.LogError("[DraftSelectionMinigame] HudManager.Instance is null — cannot create minigame.");
+            return null;
+        }
+        var go = Instantiate(prefab, HudManager.Instance.transform);
         var existing = go.GetComponent<Minigame>();
         if (existing != null) UnityEngine.Object.DestroyImmediate(existing);
         go.SetActive(false);
