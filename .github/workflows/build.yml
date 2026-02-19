@@ -1,0 +1,38 @@
+name: Build DraftModeTOUM
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # allows manual trigger from GitHub UI
+
+jobs:
+  build:
+    runs-on: windows-latest  # needs Windows for Among Us interop DLLs
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET / MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Add BepInEx NuGet source
+        run: nuget sources add -Name BepInEx -Source https://nuget.bepinex.dev/v3/index.json
+
+      - name: Restore NuGet packages
+        run: nuget restore DraftModeTOUM.sln
+
+      - name: Build (Release)
+        run: msbuild DraftModeTOUM.sln /p:Configuration=Release /p:Platform="Any CPU"
+
+      - name: Upload DLL artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DraftModeTOUM
+          path: bin/Release/DraftModeTOUM.dll
+          if-no-files-found: error
