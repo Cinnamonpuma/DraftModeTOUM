@@ -28,34 +28,66 @@ namespace DraftModeTOUM.Patches
                     return false;
 
                 case DraftRpc.StartDraft:
+                    // Host broadcasts this RPC to all clients INCLUDING itself.
+                    // The host already set up state before broadcasting, so skip self.
                     if (!AmongUsClient.Instance.AmHost)
                         HandleStartDraft(reader);
+                    else
+                        ConsumeStartDraftPacket(reader); // drain the reader bytes so Hazel doesn't choke
                     return false;
 
                 case DraftRpc.AnnounceTurn:
+                    // Host already handled this locally via HandleAnnounceTurnLocal — skip self.
                     if (!AmongUsClient.Instance.AmHost)
                         HandleAnnounceTurn(reader);
+                    else
+                        ConsumeAnnounceTurnPacket(reader);
                     return false;
 
                 case DraftRpc.Recap:
+                    // Host already sent this locally via SendChatLocal — skip self.
                     if (!AmongUsClient.Instance.AmHost)
                         DraftManager.SendChatLocal(reader.ReadString());
+                    else
+                        reader.ReadString(); // drain
                     return false;
 
                 case DraftRpc.SlotNotify:
-                    // Slot data is already synced via StartDraft RPC into _pidToSlot.
-                    // Just consume the packet — the left panel reads from DraftManager directly.
+                    // Host already has slot data — just drain the packet for clients.
                     if (!AmongUsClient.Instance.AmHost)
                     {
                         int count = reader.ReadInt32();
                         for (int i = 0; i < count; i++) { reader.ReadByte(); reader.ReadInt32(); }
                         DraftUiManager.RefreshTurnList();
                     }
+                    else
+                    {
+                        int count = reader.ReadInt32();
+                        for (int i = 0; i < count; i++) { reader.ReadByte(); reader.ReadInt32(); }
+                    }
                     return false;
 
                 default:
                     return true;
             }
+        }
+
+        // Drain helpers — called on the host when it receives its own broadcast back.
+        // We must read the exact bytes written or Hazel will corrupt subsequent packets.
+        private static void ConsumeStartDraftPacket(MessageReader reader)
+        {
+            int totalSlots = reader.ReadInt32();
+            int listCount = reader.ReadInt32();
+            for (int i = 0; i < listCount; i++) { reader.ReadByte(); reader.ReadInt32(); }
+        }
+
+        private static void ConsumeAnnounceTurnPacket(MessageReader reader)
+        {
+            reader.ReadInt32(); // turnNumber
+            reader.ReadInt32(); // slot
+            reader.ReadByte();  // pickerId
+            int roleCount = reader.ReadInt32();
+            for (int i = 0; i < roleCount; i++) reader.ReadString();
         }
 
         private static void HandleStartDraft(MessageReader reader)

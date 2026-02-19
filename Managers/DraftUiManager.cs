@@ -99,7 +99,7 @@ namespace DraftModeTOUM.Managers
             if (RoleManager.Instance == null) return null;
             string normalized = Normalize(roleName);
             return RoleManager.Instance.AllRoles.ToArray()
-                .FirstOrDefault(r => Normalize(r.GetRoleName()) == normalized);
+                .FirstOrDefault(r => Normalize(r.NiceName) == normalized);
         }
 
         private static Sprite? GetRoleIcon(RoleBehaviour? role)
