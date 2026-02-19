@@ -1,6 +1,5 @@
-﻿using DraftModeTOUM.Managers;
+using DraftModeTOUM.Managers;
 using HarmonyLib;
-using System.Linq;
 using UnityEngine;
 
 namespace DraftModeTOUM.Patches
@@ -15,61 +14,77 @@ namespace DraftModeTOUM.Patches
             string msg = __instance.freeChatField.textArea.text.Trim();
             if (string.IsNullOrEmpty(msg)) return true;
 
+            // ── /draft ────────────────────────────────────────────────────────
             if (msg.StartsWith("/draft", System.StringComparison.OrdinalIgnoreCase)
                 && !msg.StartsWith("/draftrecap", System.StringComparison.OrdinalIgnoreCase))
             {
                 if (!AmongUsClient.Instance.AmHost)
-                {
-                    DraftManager.SendChatLocal("<color=red>Only host can start draft.</color>");
-                }
+                    DraftManager.SendSystemMessage("Only the host can start a draft.");
                 else if (DraftManager.IsDraftActive)
-                {
-                    DraftManager.SendChatLocal("<color=red>Draft already active.</color>");
-                }
+                    DraftManager.SendSystemMessage("A draft is already in progress.");
                 else
-                {
                     DraftManager.StartDraft();
-                }
+
                 __instance.freeChatField.textArea.Clear();
                 return false;
             }
 
+            // ── /draftrecap ───────────────────────────────────────────────────
             if (msg.StartsWith("/draftrecap", System.StringComparison.OrdinalIgnoreCase))
             {
                 if (!AmongUsClient.Instance.AmHost)
                 {
-                    DraftManager.SendChatLocal("<color=red>Only host can change draft settings.</color>");
+                    DraftManager.SendSystemMessage("Only the host can change draft settings.");
                 }
                 else
                 {
                     DraftManager.ShowRecap = !DraftManager.ShowRecap;
-                    string status = DraftManager.ShowRecap
-                        ? "<color=green>ON</color>"
-                        : "<color=red>OFF</color>";
-                    DraftManager.SendChatLocal($"<color=#FFD700>Draft recap is now: {status}</color>");
+                    string state = DraftManager.ShowRecap
+                        ? "<color=#00FF00>ON</color>"
+                        : "<color=#FF4444>OFF</color>";
+                    DraftManager.SendSystemMessage($"Draft recap is now: {state}");
                 }
                 __instance.freeChatField.textArea.Clear();
                 return false;
             }
 
-            if (DraftManager.IsDraftActive)
+            // ── /draftmod ─────────────────────────────────────────────────────
+            if (msg.StartsWith("/draftmod", System.StringComparison.OrdinalIgnoreCase))
             {
-                if (msg == "1" || msg == "2" || msg == "3" || msg == "4")
+                if (!AmongUsClient.Instance.AmHost)
                 {
-                    var currentPicker = DraftManager.GetCurrentPickerState();
-                    if (currentPicker != null && currentPicker.PlayerId == PlayerControl.LocalPlayer.PlayerId)
-                    {
-                        int index = int.Parse(msg) - 1;
-                        DraftNetworkHelper.SendPickToHost(index);
-                        DraftManager.SendChatLocal($"<color=green>You selected Option {msg}!</color>");
-                    }
-                    else
-                    {
-                        DraftManager.SendChatLocal("<color=red>It is not your turn to pick!</color>");
-                    }
-                    __instance.freeChatField.textArea.Clear();
-                    return false;
+                    DraftManager.SendSystemMessage("Only the host can change draft settings.");
                 }
+                else
+                {
+                    Patches.RequireModPatch.RequireDraftMod = !Patches.RequireModPatch.RequireDraftMod;
+                    string state = Patches.RequireModPatch.RequireDraftMod
+                        ? "<color=#00FF00>ON</color>"
+                        : "<color=#FF4444>OFF</color>";
+                    DraftManager.SendSystemMessage($"Require DraftModeTOUM: {state}");
+                }
+                __instance.freeChatField.textArea.Clear();
+                return false;
+            }
+
+            // ── Number picks (chat fallback while screen is open) ─────────────
+            if (DraftManager.IsDraftActive
+                && (msg == "1" || msg == "2" || msg == "3" || msg == "4"))
+            {
+                var currentPicker = DraftManager.GetCurrentPickerState();
+                if (currentPicker != null
+                    && currentPicker.PlayerId == PlayerControl.LocalPlayer.PlayerId)
+                {
+                    int index = int.Parse(msg) - 1;
+                    DraftNetworkHelper.SendPickToHost(index);
+                    // No system message here — the screen already gives visual feedback
+                }
+                else
+                {
+                    DraftManager.SendSystemMessage("It is not your turn to pick.");
+                }
+                __instance.freeChatField.textArea.Clear();
+                return false;
             }
 
             return true;

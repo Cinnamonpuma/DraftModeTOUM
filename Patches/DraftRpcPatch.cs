@@ -1,4 +1,4 @@
-﻿using DraftModeTOUM.Managers;
+using DraftModeTOUM.Managers;
 using HarmonyLib;
 using Hazel;
 using System.Collections.Generic;
@@ -8,10 +8,10 @@ namespace DraftModeTOUM.Patches
 {
     public enum DraftRpc : byte
     {
-        SubmitPick = 220,
+        SubmitPick   = 220,
         AnnounceTurn = 221,
-        StartDraft = 223,
-        Recap = 224
+        StartDraft   = 223,
+        Recap        = 224
     }
 
     [HarmonyPatch(typeof(PlayerControl), nameof(PlayerControl.HandleRpc))]
@@ -37,9 +37,8 @@ namespace DraftModeTOUM.Patches
                     return false;
 
                 case DraftRpc.Recap:
-
                     if (!AmongUsClient.Instance.AmHost)
-                        DraftManager.SendChatLocal(reader.ReadString());
+                        DraftManager.SendSystemMessage(reader.ReadString());
                     return false;
 
                 default:
@@ -50,24 +49,23 @@ namespace DraftModeTOUM.Patches
         private static void HandleStartDraft(MessageReader reader)
         {
             int totalSlots = reader.ReadInt32();
-            int listCount = reader.ReadInt32();
-            List<byte> pids = new List<byte>();
-            List<int> slots = new List<int>();
+            int listCount  = reader.ReadInt32();
+            var pids  = new List<byte>();
+            var slots = new List<int>();
             for (int i = 0; i < listCount; i++) { pids.Add(reader.ReadByte()); slots.Add(reader.ReadInt32()); }
+
             DraftManager.SetDraftStateFromHost(totalSlots, pids, slots);
-            DraftManager.SendChatLocal($"<color=#FF4444><b>DRAFT MODE ENABLED!</b></color>");
+            DraftManager.SendSystemMessage("<b>DRAFT MODE ENABLED!</b>", showHeadsup: true);
         }
 
- 
         private static void HandleAnnounceTurn(MessageReader reader)
         {
-            int turnNumber = reader.ReadInt32(); 
-            int slot = reader.ReadInt32();
-            byte pickerId = reader.ReadByte();
-            string[] roles = { reader.ReadString(), reader.ReadString(), reader.ReadString() };
+            int    turnNumber = reader.ReadInt32();
+            int    slot       = reader.ReadInt32();
+            byte   pickerId   = reader.ReadByte();
+            string[] roles    = { reader.ReadString(), reader.ReadString(), reader.ReadString() };
 
             DraftManager.SetClientTurn(turnNumber);
-
             DisplayTurnAnnouncement(slot, pickerId, roles);
         }
 
@@ -80,14 +78,19 @@ namespace DraftModeTOUM.Patches
         {
             if (PlayerControl.LocalPlayer.PlayerId == pickerId)
             {
-                DraftManager.SendChatLocal($"<color=#00FF00><b>YOUR TURN!</b></color>");
-                for (int i = 0; i < 3; i++)
-                    DraftManager.SendChatLocal($"{i + 1}. <color=#4BD7E4>{roles[i]}</color>");
-                DraftManager.SendChatLocal($"4. <color=#3CCC3C>RANDOM</color>");
+                // Show the UI pick screen
+                DraftScreenController.Show(roles);
+
+                // Brief system chat nudge as fallback for players who miss the screen
+                DraftManager.SendSystemMessage(
+                    "<b>YOUR TURN!</b> Pick a role from the selection screen.",
+                    showHeadsup: true);
             }
             else
             {
-                DraftManager.SendChatLocal($"<color=yellow>Player {slot} is picking...</color>");
+                // Close any lingering screen and show a system message to spectators
+                DraftScreenController.Hide();
+                DraftManager.SendSystemMessage($"Player {slot} is picking their role...");
             }
         }
     }
@@ -114,10 +117,8 @@ namespace DraftModeTOUM.Patches
 
         public static void BroadcastDraftStart(int totalSlots, List<byte> pids, List<int> slots)
         {
-
             DraftManager.SetDraftStateFromHost(totalSlots, pids, slots);
-            DraftManager.SendChatLocal($"<color=#FF4444><b>DRAFT MODE ENABLED!</b></color>");
-
+            DraftManager.SendSystemMessage("<b>DRAFT MODE ENABLED!</b>", showHeadsup: true);
 
             var writer = AmongUsClient.Instance.StartRpcImmediately(
                 PlayerControl.LocalPlayer.NetId,
@@ -132,7 +133,6 @@ namespace DraftModeTOUM.Patches
 
         public static void SendTurnAnnouncement(int slot, byte playerId, List<string> roles, int turnNumber)
         {
-
             DraftRpcPatch.HandleAnnounceTurnLocal(slot, playerId, roles);
 
             var writer = AmongUsClient.Instance.StartRpcImmediately(
@@ -149,8 +149,7 @@ namespace DraftModeTOUM.Patches
 
         public static void BroadcastRecap(string recapText)
         {
-            DraftManager.SendChatLocal(recapText);
-
+            DraftManager.SendSystemMessage(recapText);
 
             var writer = AmongUsClient.Instance.StartRpcImmediately(
                 PlayerControl.LocalPlayer.NetId,

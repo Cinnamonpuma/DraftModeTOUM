@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
@@ -21,23 +21,33 @@ namespace DraftModeTOUM
             Logger = Log;
             Logger.LogInfo($"DraftModeTOUM v{PluginInfo.PLUGIN_VERSION} loading...");
 
-            try
-            {
-                ClassInjector.RegisterTypeInIl2Cpp<DraftTicker>();
-                Logger.LogInfo("DraftTicker registered successfully.");
-            }
-            catch (System.Exception ex)
-            {
-                Logger.LogError($"Failed to register DraftTicker: {ex}");
-            }
+            RegisterMonoBehaviours();
 
             _harmony = new Harmony(PluginInfo.PLUGIN_GUID);
             _harmony.PatchAll();
 
-            // Manually patch internal TOUM class + OnPlayerJoined rejoin guard
             RequireModPatch.Apply(_harmony);
 
             Logger.LogInfo("DraftModeTOUM loaded successfully!");
+        }
+
+        private static void RegisterMonoBehaviours()
+        {
+            TryRegister<DraftTicker>("DraftTicker");
+            TryRegister<DraftScreenController>("DraftScreenController");
+        }
+
+        private static void TryRegister<T>(string name) where T : MonoBehaviour
+        {
+            try
+            {
+                ClassInjector.RegisterTypeInIl2Cpp<T>();
+                Logger.LogInfo($"{name} registered successfully.");
+            }
+            catch (System.Exception ex)
+            {
+                Logger.LogError($"Failed to register {name}: {ex}");
+            }
         }
 
         public override bool Unload()
@@ -49,12 +59,11 @@ namespace DraftModeTOUM
 
     internal static class PluginInfo
     {
-        public const string PLUGIN_GUID = "com.draftmodetoun.mod";
-        public const string PLUGIN_NAME = "DraftModeTOUM";
-        public const string PLUGIN_VERSION = "1.0.3";
+        public const string PLUGIN_GUID    = "com.draftmodetoun.mod";
+        public const string PLUGIN_NAME    = "DraftModeTOUM";
+        public const string PLUGIN_VERSION = "1.0.4";
     }
 
-    // Clear kicked/verified lists when the host disconnects from a lobby
     [HarmonyPatch(typeof(AmongUsClient), nameof(AmongUsClient.OnDisconnected))]
     public static class OnDisconnectPatch
     {
@@ -62,6 +71,7 @@ namespace DraftModeTOUM
         public static void Postfix()
         {
             RequireModPatch.ClearSession();
+            DraftScreenController.Hide();
             DraftModePlugin.Logger.LogInfo("[DraftModePlugin] Session cleared on disconnect.");
         }
     }
