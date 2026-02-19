@@ -112,6 +112,7 @@ Draft recap is now: OFF
 |---|---|---|
 | `/draft` | Host only | Starts the draft |
 | `/draftrecap` | Host only | Toggles the end-of-draft recap on/off |
+| `/draftmod` | Host only | Toggles whether players must have DraftModeTOUM installed to join |
 | `1` / `2` / `3` | Active picker | Pick one of the 3 offered roles |
 | `4` | Active picker | Pick a fully random role |
 
