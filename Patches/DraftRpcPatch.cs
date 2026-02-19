@@ -53,11 +53,18 @@ namespace DraftModeTOUM.Patches
                     return false;
 
                 case DraftRpc.SlotNotify:
-                    // Host already has slot data — just drain the packet for clients.
                     if (!AmongUsClient.Instance.AmHost)
                     {
                         int count = reader.ReadInt32();
-                        for (int i = 0; i < count; i++) { reader.ReadByte(); reader.ReadInt32(); }
+                        var pidList  = new List<byte>();
+                        var slotList = new List<int>();
+                        for (int i = 0; i < count; i++)
+                        {
+                            pidList.Add(reader.ReadByte());
+                            slotList.Add(reader.ReadInt32());
+                        }
+                        // Apply slot data so clients know their own number
+                        DraftManager.SetDraftStateFromHost(count, pidList, slotList);
                         DraftUiManager.RefreshTurnList();
                     }
                     else
@@ -111,7 +118,7 @@ namespace DraftModeTOUM.Patches
             var roles = new string[roleCount];
             for (int i = 0; i < roleCount; i++) roles[i] = reader.ReadString();
 
-            DraftManager.SetClientTurn(turnNumber);
+            DraftManager.SetClientTurn(turnNumber, slot);
 
             DisplayTurnAnnouncement(slot, pickerId, roles);
         }
@@ -125,11 +132,18 @@ namespace DraftModeTOUM.Patches
         {
             if (PlayerControl.LocalPlayer.PlayerId == pickerId)
             {
+                // It's your turn — show the picker UI
+                DraftManager.SendChatLocal($"<color=#00FF88><b>\u2605 It's your turn! You are Pick #{slot}. Choose your role!</b></color>");
                 DraftUiManager.ShowPicker(roles.ToList());
             }
             else
             {
                 DraftUiManager.CloseAll();
+                // Tell waiting players who is currently picking
+                var picker = PlayerControl.AllPlayerControls.ToArray()
+                    .FirstOrDefault(p => p.PlayerId == pickerId);
+                string name = picker != null ? picker.Data.PlayerName : $"Player {slot}";
+                DraftManager.SendChatLocal($"<color=#FFD700>\u23f3 Pick #{slot} — <b>{name}</b> is choosing...</color>");
             }
         }
     }
@@ -177,7 +191,6 @@ namespace DraftModeTOUM.Patches
 
         public static void SendTurnAnnouncement(int slot, byte playerId, List<string> roles, int turnNumber)
         {
-            DraftModePlugin.Logger.LogInfo($"[DraftNetworkHelper] SendTurnAnnouncement: slot={slot}, picker={playerId}, localPlayer={PlayerControl.LocalPlayer?.PlayerId}, roles={string.Join(",", roles)}");
             DraftRpcPatch.HandleAnnounceTurnLocal(slot, playerId, roles);
 
             var writer = AmongUsClient.Instance.StartRpcImmediately(

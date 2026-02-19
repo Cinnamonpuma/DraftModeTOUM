@@ -44,7 +44,7 @@ namespace DraftModeTOUM.Managers
         private static int _impostorsDrafted = 0;
         private static int _neutralsDrafted = 0;
 
-        private static bool _soloTestMode = false;
+
         public static List<int> TurnOrder { get; private set; } = new List<int>();
         private static Dictionary<int, PlayerDraftState> _slotMap = new Dictionary<int, PlayerDraftState>();
         private static Dictionary<byte, int> _pidToSlot = new Dictionary<byte, int>();
@@ -63,11 +63,18 @@ namespace DraftModeTOUM.Managers
             return GetStateForSlot(TurnOrder[CurrentTurn - 1]);
         }
 
-        public static void SetClientTurn(int turnNumber)
+        public static void SetClientTurn(int turnNumber, int currentPickerSlot)
         {
             if (AmongUsClient.Instance.AmHost) return;
             CurrentTurn = turnNumber;
             TurnTimeLeft = TurnDuration;
+            // Update IsPickingNow flags so the turn list renders correctly on clients
+            foreach (var state in _slotMap.Values)
+            {
+                state.IsPickingNow = (state.SlotNumber == currentPickerSlot);
+                if (state.SlotNumber < currentPickerSlot)
+                    state.HasPicked = true;
+            }
         }
 
         public static void SetDraftStateFromHost(int totalSlots, List<byte> playerIds, List<int> slotNumbers)
@@ -98,8 +105,6 @@ namespace DraftModeTOUM.Managers
 
             var players = PlayerControl.AllPlayerControls.ToArray()
                 .Where(p => p != null && !p.Data.Disconnected).ToList();
-            _soloTestMode = (players.Count < 2);
-
             var pool = RolePoolBuilder.BuildPool();
             _lobbyRolePool = pool.Roles;
             _roleMaxCounts = pool.MaxCounts;
@@ -107,17 +112,21 @@ namespace DraftModeTOUM.Managers
             _roleFactions = pool.Factions;
             if (_lobbyRolePool.Count == 0) return;
 
-            int totalSlots = _soloTestMode ? 4 : players.Count;
+            int totalSlots = players.Count;
             var shuffledSlots = Enumerable.Range(1, totalSlots).OrderBy(_ => UnityEngine.Random.value).ToList();
             List<byte> syncPids = new List<byte>();
             List<int> syncSlots = new List<int>();
 
+            // Broadcast a start announcement with the pick order
+            var orderMsg = new StringBuilder();
+            orderMsg.AppendLine("<color=#FFD700><b>\U0001F3B2 DRAFT STARTING!</b></color>");
+            orderMsg.AppendLine($"<color=#AAAAAA>{totalSlots} players — each gets a random pick number.</color>");
+            SendChatLocal(orderMsg.ToString());
+
             for (int i = 0; i < totalSlots; i++)
             {
                 int slot = shuffledSlots[i];
-                byte pid = _soloTestMode
-                    ? (i == 0 ? PlayerControl.LocalPlayer.PlayerId : (byte)(200 + i))
-                    : players[i].PlayerId;
+                byte pid = players[i].PlayerId;
                 _slotMap[slot] = new PlayerDraftState { PlayerId = pid, SlotNumber = slot };
                 _pidToSlot[pid] = slot;
                 syncPids.Add(pid);
@@ -158,7 +167,7 @@ namespace DraftModeTOUM.Managers
             _roleWeights.Clear();
             _roleFactions.Clear();
             TurnOrder.Clear();
-            _soloTestMode = false;
+
             _impostorsDrafted = 0;
             _neutralsDrafted = 0;
             // Only wipe UpCommandRequests if we're cancelling before roles were applied.
