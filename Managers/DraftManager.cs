@@ -79,47 +79,84 @@ namespace DraftModeTOUM.Managers
         }
 
         public static void StartDraft()
-        {
-            if (!AmongUsClient.Instance.AmHost) return;
-            DraftTicker.EnsureExists();
-            Reset();
-            UpCommandRequests.Clear();
+{
+if (!AmongUsClient.Instance.AmHost) return;
+DraftTicker.EnsureExists();
+Reset();
+UpCommandRequests.Clear();
 
-            var players = PlayerControl.AllPlayerControls.ToArray()
-                .Where(p => p != null && !p.Data.Disconnected).ToList();
-            _soloTestMode = (players.Count < 2);
+// ── Read the active preset and compute caps ──────────────────────
+string presetPath = PresetConfigReader.FindActivePreset();
+PresetReadResult preset = presetPath != null
+? PresetConfigReader.Read(presetPath)
+: new PresetReadResult();
 
-            _lobbyRolePool = RolePoolBuilder.BuildPool();
-            if (_lobbyRolePool.Count == 0) return;
+var players = PlayerControl.AllPlayerControls.ToArray()
+.Where(p => p != null && !p.Data.Disconnected).ToList();
+int playerCount = players.Count;
+_soloTestMode = (playerCount < 2);
+int totalSlots = _soloTestMode ? 4 : playerCount;
 
-            int totalSlots = _soloTestMode ? 4 : players.Count;
-            var shuffledSlots = Enumerable.Range(1, totalSlots).OrderBy(_ => UnityEngine.Random.value).ToList();
-            List<byte> syncPids = new List<byte>();
-            List<int> syncSlots = new List<int>();
+// Impostor cap: AU game option (authoritative) but never more than
+// the total impostor role slots in the preset
+int auImpostors = GameOptionsManager.Instance.CurrentGameOptions.NumImpostors;
+MaxImpostors = preset.TotalImpostorSlots > 0
+? Math.Min(auImpostors, preset.TotalImpostorSlots)
+: auImpostors;
 
-            for (int i = 0; i < totalSlots; i++)
-            {
-                int slot = shuffledSlots[i];
-                byte pid = _soloTestMode
-                    ? (i == 0 ? PlayerControl.LocalPlayer.PlayerId : (byte)(200 + i))
-                    : players[i].PlayerId;
-                _slotMap[slot] = new PlayerDraftState { PlayerId = pid, SlotNumber = slot };
-                _pidToSlot[pid] = slot;
-                syncPids.Add(pid);
-                syncSlots.Add(slot);
-            }
+// Neutral caps: sum of Num values per subalignment from the preset,
+// scaled so neutrals never eat more than half the non-impostor seats
+int crewSeats = totalSlots - MaxImpostors;
+int maxTotalNeutrals = Math.Max(1, crewSeats / 3); // rough sanity cap
 
-            TurnOrder = _slotMap.Keys.OrderBy(s => s).ToList();
-            CurrentTurn = 1;
-            TurnTimeLeft = TurnDuration;
-            IsDraftActive = true;
+MaxNeutralKilling = Clamp(preset.TotalNeutralKillingSlots, 0, maxTotalNeutrals);
+MaxNeutralEvil = Clamp(preset.TotalNeutralEvilSlots, 0, maxTotalNeutrals);
+MaxNeutralBenign = Clamp(preset.TotalNeutralBenignSlots, 0, maxTotalNeutrals);
+MaxNeutralOutlier = Clamp(preset.TotalNeutralOutlierSlots, 0, maxTotalNeutrals);
 
-            DraftNetworkHelper.BroadcastDraftStart(totalSlots, syncPids, syncSlots);
-            OfferRolesToCurrentPicker();
-        }
+DraftModePlugin.Logger.LogInfo(
+$"[DraftManager] Caps — Imp: {MaxImpostors}, " +
+$"NK: {MaxNeutralKilling}, NE: {MaxNeutralEvil}, " +
+$"NB: {MaxNeutralBenign}, NO: {MaxNeutralOutlier}");
 
-        public static void Reset()
-        {
+// ── Build role pool from preset (only Num >= 1 roles) ───────────
+_lobbyRolePool = preset.RoleNums.Count > 0
+? preset.RoleNums.Keys.OrderBy(_ => UnityEngine.Random.value).ToList()
+: RolePoolBuilder.BuildPool(); // fallback: full list
+
+if (_lobbyRolePool.Count == 0) return;
+
+// ── Assign slots ─────────────────────────────────────────────────
+var shuffledSlots = Enumerable.Range(1, totalSlots)
+.OrderBy(_ => UnityEngine.Random.value).ToList();
+List<byte> syncPids = new List<byte>();
+List<int> syncSlots = new List<int>();
+
+for (int i = 0; i < totalSlots; i++)
+{
+int slot = shuffledSlots[i];
+byte pid = _soloTestMode
+? (i == 0 ? PlayerControl.LocalPlayer.PlayerId : (byte)(200 + i))
+: players[i].PlayerId;
+_slotMap[slot] = new PlayerDraftState { PlayerId = pid, SlotNumber = slot };
+_pidToSlot[pid] = slot;
+syncPids.Add(pid);
+syncSlots.Add(slot);
+}
+
+TurnOrder = _slotMap.Keys.OrderBy(s => s).ToList();
+CurrentTurn = 1;
+TurnTimeLeft = TurnDuration;
+IsDraftActive = true;
+
+DraftNetworkHelper.BroadcastDraftStart(totalSlots, syncPids, syncSlots);
+OfferRolesToCurrentPicker();
+}
+
+private static int Clamp(int value, int min, int max) =>
+value < min ? min : value > max ? max : value;
+
+        public static void Reset(){
             IsDraftActive = false;
             CurrentTurn = 0;
             TurnTimeLeft = 0f;
@@ -130,9 +167,17 @@ namespace DraftModeTOUM.Managers
             TurnOrder.Clear();
             _soloTestMode = false;
             _impostorsDrafted = 0;
-            _neutralsDrafted = 0;
+            _neutralKillingDrafted = 0;
+            _neutralEvilDrafted = 0;
+            _neutralBenignDrafted = 0;
+            _neutralOutlierDrafted = 0;
+            MaxImpostors = 2;
+            MaxNeutralKilling = 1;
+            MaxNeutralEvil = 1;
+            MaxNeutralBenign = 1;
+            MaxNeutralOutlier = 1;
             UpCommandRequests.Clear();
-        }
+}
 
         public static void Tick(float deltaTime)
         {
@@ -143,15 +188,19 @@ namespace DraftModeTOUM.Managers
 
         // Returns roles that are undrafted and within faction caps
         private static List<string> GetAvailableRoles()
-        {
-            return _lobbyRolePool.Where(r =>
-            {
-                if (_draftedRoles.Contains(r)) return false;
-                if (RoleCategory.IsImpostor(r) && _impostorsDrafted >= MaxImpostors) return false;
-                if (RoleCategory.IsNeutral(r) && _neutralsDrafted >= MaxNeutrals) return false;
-                return true;
-            }).ToList();
-        }
+{
+return _lobbyRolePool.Where(r =>
+{
+if (_draftedRoles.Contains(r)) return false;
+if (RoleCategory.IsImpostor(r) && _impostorsDrafted >= MaxImpostors) return false;
+var sub = RoleCategory.GetSubAlignment(r);
+if (sub == RoleSubAlignment.NeutralKilling && _neutralKillingDrafted >= MaxNeutralKilling) return false;
+if (sub == RoleSubAlignment.NeutralEvil && _neutralEvilDrafted >= MaxNeutralEvil) return false;
+if (sub == RoleSubAlignment.NeutralBenign && _neutralBenignDrafted >= MaxNeutralBenign) return false;
+if (sub == RoleSubAlignment.NeutralOutlier && _neutralOutlierDrafted >= MaxNeutralOutlier) return false;
+return true;
+}).ToList();
+}
 
         private static void OfferRolesToCurrentPicker()
         {
@@ -244,14 +293,27 @@ namespace DraftModeTOUM.Managers
             state.IsPickingNow = false;
             _draftedRoles.Add(roleName);
 
-            // Update faction counters
-            var faction = RoleCategory.GetFaction(roleName);
-            if (faction == RoleFaction.Impostor) _impostorsDrafted++;
-            else if (faction == RoleFaction.Neutral) _neutralsDrafted++;
+            var sub = RoleCategory.GetSubAlignment(roleName);
+if (RoleCategory.IsImpostor(roleName))
+_impostorsDrafted++;
+else
+{
+switch (sub)
+{
+case RoleSubAlignment.NeutralKilling: _neutralKillingDrafted++; break;
+case RoleSubAlignment.NeutralEvil: _neutralEvilDrafted++; break;
+case RoleSubAlignment.NeutralBenign: _neutralBenignDrafted++; break;
+case RoleSubAlignment.NeutralOutlier: _neutralOutlierDrafted++; break;
+}
+}
 
-            DraftModePlugin.Logger.LogInfo(
-                $"[DraftManager] '{roleName}' drafted ({faction}). " +
-                $"Impostors: {_impostorsDrafted}/{MaxImpostors}, Neutrals: {_neutralsDrafted}/{MaxNeutrals}");
+DraftModePlugin.Logger.LogInfo(
+$"[DraftManager] '{roleName}' drafted ({sub}). " +
+$"Imp: {_impostorsDrafted}/{MaxImpostors}, " +
+$"NK: {_neutralKillingDrafted}/{MaxNeutralKilling}, " +
+$"NE: {_neutralEvilDrafted}/{MaxNeutralEvil}, " +
+$"NB: {_neutralBenignDrafted}/{MaxNeutralBenign}, " +
+$"NO: {_neutralOutlierDrafted}/{MaxNeutralOutlier}");
 
             CurrentTurn++;
             if (CurrentTurn > TurnOrder.Count)
