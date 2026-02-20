@@ -7,9 +7,11 @@ using UnityEngine;
 namespace DraftModeTOUM
 {
     /// <summary>
-    /// Spawns the SelectRoleGame prefab, populates 4 role cards (3 offered + RANDOM),
-    /// loads each role's icon via TouRoleUtils.GetRoleIcon(), and tints the card
-    /// background to the role's specific colour on hover.
+    /// Spawns the SelectRoleGame prefab, populates 4 role cards (3 offered + RANDOM).
+    /// The prefab stacks cards along Z (like a deck of cards), separated by rotation —
+    /// this matches exactly how TOUM's TraitorSelectionMinigame works.
+    /// CardZSpacing controls how far apart the cards are in Z (depth) which controls
+    /// how much they fan out visually.
     /// </summary>
     public class DraftScreenController : MonoBehaviour
     {
@@ -22,11 +24,13 @@ namespace DraftModeTOUM
 
         private const string PrefabName = "SelectRoleGame";
 
-        // ── Card spacing ──────────────────────────────────────────────────────
-        // Adjust this value to control gap between cards.
-        // If cards use a RectTransform (Canvas UI), this is in pixels (try 150–200).
-        // If cards are plain world-space objects, this is in Unity units (try 1.2–2.0).
-        public static float CardSpacing = 150f;
+        // Controls Z-depth spacing between stacked cards.
+        // TOUM uses z = index (0,1,2,3). Increase to fan cards out more.
+        public static float CardZSpacing = 1f;
+
+        // Controls rotation spread (degrees per card). TOUM uses randZ = -10 + z*5.
+        // Increase to rotate cards further apart.
+        public static float CardRotationPerStep = 5f;
 
         // ── Public API ────────────────────────────────────────────────────────
 
@@ -84,119 +88,97 @@ namespace DraftModeTOUM
                 _screenRoot.transform.localPosition = new Vector3(0f, 0f, -600f);
             }
 
-            // 3. Child references
-            var rolesHolder = _screenRoot.transform.Find("Roles") ?? _screenRoot.transform;
+            // 3. Child references — matching TraitorSelectionMinigame's Awake()
+            var rolesHolder = _screenRoot.transform.Find("Roles");
+            var holderGo    = _screenRoot.transform.Find("RoleCardHolder");
 
             var statusGo = _screenRoot.transform.Find("Status");
             if (statusGo != null) _statusText = statusGo.GetComponent<TextMeshPro>();
             if (_statusText != null)
                 _statusText.text = "<color=#00FF00><b>Pick your role!</b></color>";
 
-            var holderGo     = _screenRoot.transform.Find("RoleCardHolder");
-            var cardTemplate = holderGo != null && holderGo.childCount > 0
-                ? holderGo.GetChild(0).gameObject : null;
-
-            if (cardTemplate == null)
+            // RolePrefab is the RoleCardHolder GameObject itself (not its child),
+            // matching: RolePrefab = transform.FindChild("RoleCardHolder").gameObject
+            if (holderGo == null)
             {
-                DraftModePlugin.Logger.LogError("[DraftScreenController] RoleCard template not found.");
+                DraftModePlugin.Logger.LogError("[DraftScreenController] RoleCardHolder not found.");
                 Destroy(_screenRoot);
                 Destroy(gameObject);
                 Instance = null;
                 return;
             }
 
-            // Disable any layout group on the holder so it doesn't override our positions
-            if (holderGo != null)
-            {
-                var layoutGroup = holderGo.GetComponent<UnityEngine.UI.LayoutGroup>();
-                if (layoutGroup != null)
-                {
-                    layoutGroup.enabled = false;
-                    DraftModePlugin.Logger.LogInfo("[DraftScreenController] Disabled LayoutGroup on RoleCardHolder.");
-                }
-            }
+            var rolePrefab = holderGo.gameObject;
+            var parent     = rolesHolder != null ? rolesHolder : _screenRoot.transform;
 
-            // 4. Spawn 4 cards
+            // 4. Spawn 4 cards, mirroring CreateCard() in TraitorSelectionMinigame
             for (int i = 0; i < 4; i++)
             {
                 int    idx      = i;
                 bool   isRandom = (i == 3);
                 string roleName = isRandom ? "RANDOM" : _offeredRoles[i];
+                Color  color    = isRandom ? RoleColors.RandomColour : RoleColors.GetColor(roleName);
 
-                // Per-role colour from RoleColors, or green for RANDOM
-                Color roleColour = isRandom
-                    ? RoleColors.RandomColour
-                    : RoleColors.GetColor(roleName);
+                // Instantiate the RoleCardHolder prefab under Roles (matching TOUM exactly)
+                var newRoleObj  = Instantiate(rolePrefab, parent);
+                var actualCard  = newRoleObj.transform.GetChild(0);
 
-                var card = Instantiate(cardTemplate, holderGo != null ? holderGo : rolesHolder);
-                card.SetActive(true);
-                card.name = $"DraftCard_{i}";
+                // Z-based stacking + rotation — mirrors TOUM's CreateCard positioning
+                float rotZ = -10f + i * CardRotationPerStep + UnityEngine.Random.Range(-1.5f, 1.5f);
+                newRoleObj.transform.localRotation = Quaternion.Euler(0f, 0f, -rotZ);
+                newRoleObj.transform.localPosition = new Vector3(
+                    newRoleObj.transform.localPosition.x,
+                    newRoleObj.transform.localPosition.y,
+                    i * CardZSpacing);
 
-                // ── Position the card ─────────────────────────────────────────
-                // Cards are centred around 0. With 4 cards the offsets are:
-                //   i=0 → -1.5 * spacing
-                //   i=1 → -0.5 * spacing
-                //   i=2 → +0.5 * spacing
-                //   i=3 → +1.5 * spacing
-                var rt = card.GetComponent<RectTransform>();
-                if (rt != null)
+                newRoleObj.SetActive(true);
+                newRoleObj.name = $"DraftCard_{i}";
+
+                // Populate text and image on the actual card (child 0 of the holder)
+                var roleText  = actualCard.GetChild(0).GetComponent<TextMeshPro>();
+                var roleImage = actualCard.GetChild(1).GetComponent<SpriteRenderer>();
+                var teamText  = actualCard.GetChild(2).GetComponent<TextMeshPro>();
+
+                if (roleText  != null) { roleText.text  = roleName; roleText.color  = color; }
+                if (teamText  != null) { teamText.text  = isRandom ? "Any" : GetFactionLabel(roleName); teamText.color = color; }
+
+                if (roleImage != null && !isRandom)
                 {
-                    // Canvas / UI path — use anchoredPosition (pixel space)
-                    rt.anchoredPosition = new Vector2((i - 1.5f) * CardSpacing, 0f);
-                    DraftModePlugin.Logger.LogInfo(
-                        $"[DraftScreenController] Card {i} anchoredPosition set to {rt.anchoredPosition}");
-                }
-                else
-                {
-                    // World-space path — use localPosition (Unity units)
-                    // CardSpacing is in pixels above, so divide by 100 for a sensible world-unit value.
-                    float worldSpacing = CardSpacing / 100f;
-                    card.transform.localPosition = new Vector3((i - 1.5f) * worldSpacing, 0f, 0f);
-                    DraftModePlugin.Logger.LogInfo(
-                        $"[DraftScreenController] Card {i} localPosition set to {card.transform.localPosition}");
+                    var sprite = TryGetRoleSprite(roleName);
+                    if (sprite != null) roleImage.sprite = sprite;
                 }
 
-                // RoleName text — coloured to role colour
-                SetTmp(card, "RoleName", roleName, roleColour);
-
-                // RoleTeam text — faction label, same colour
-                SetTmp(card, "RoleTeam",
-                    isRandom ? "Any" : GetFactionLabel(roleName),
-                    roleColour);
-
-                // RoleImage sprite — loaded via TouRoleUtils.GetRoleIcon()
-                var imageGo = card.transform.Find("RoleImage");
-                if (imageGo != null)
+                // Button — wire click and hover colour via ButtonRolloverHandler if present,
+                // otherwise fall back to manual SpriteRenderer tint
+                var passiveButton = actualCard.GetComponent<PassiveButton>();
+                if (passiveButton != null)
                 {
-                    var sr = imageGo.GetComponent<SpriteRenderer>();
-                    if (sr != null && !isRandom)
+                    passiveButton.OnClick = new UnityEngine.UI.Button.ButtonClickedEvent();
+                    passiveButton.OnClick.AddListener((System.Action)(() => OnCardClicked(idx)));
+
+                    // Hover: lift card forward in Z (matches TOUM's hover behaviour)
+                    passiveButton.OnMouseOver = new UnityEngine.Events.UnityEvent();
+                    passiveButton.OnMouseOver.AddListener((System.Action)(() =>
                     {
-                        var sprite = TryGetRoleSprite(roleName);
-                        if (sprite != null) sr.sprite = sprite;
-                    }
-                }
+                        var pos = newRoleObj.transform.localPosition;
+                        newRoleObj.transform.localPosition = new Vector3(pos.x, pos.y, pos.z - 10f);
+                    }));
 
-                // Card background SpriteRenderer (on the card root itself)
-                var cardBg = card.GetComponent<SpriteRenderer>();
-
-                // Wire PassiveButton hover → role colour tint
-                var btn = card.GetComponent<PassiveButton>();
-                if (btn != null)
-                {
-                    btn.OnClick = new UnityEngine.UI.Button.ButtonClickedEvent();
-                    btn.OnClick.AddListener((System.Action)(() => OnCardClicked(idx)));
-
-                    if (cardBg != null)
+                    passiveButton.OnMouseOut = new UnityEngine.Events.UnityEvent();
+                    passiveButton.OnMouseOut.AddListener((System.Action)(() =>
                     {
-                        btn.OnMouseOver = new UnityEngine.Events.UnityEvent();
-                        btn.OnMouseOver.AddListener((System.Action)(() =>
-                            cardBg.color = roleColour));
+                        var pos = newRoleObj.transform.localPosition;
+                        newRoleObj.transform.localPosition = new Vector3(pos.x, pos.y, pos.z + 10f);
+                    }));
 
-                        btn.OnMouseOut = new UnityEngine.Events.UnityEvent();
-                        btn.OnMouseOut.AddListener((System.Action)(() =>
-                            cardBg.color = Color.white));
-                    }
+                    // Also tint via ButtonRolloverHandler if available
+                    var rollover = actualCard.GetComponent<ButtonRolloverHandler>();
+                    if (rollover != null)
+                        rollover.OverColor = color;
                 }
+
+                DraftModePlugin.Logger.LogInfo(
+                    $"[DraftScreenController] Card {i} ({roleName}) spawned at z={i * CardZSpacing}, rotZ={rotZ:F1}");
             }
 
             DraftModePlugin.Logger.LogInfo("[DraftScreenController] Screen built successfully.");
@@ -240,26 +222,14 @@ namespace DraftModeTOUM
             try
             {
                 if (RoleManager.Instance == null) return null;
-
                 string normalised = roleName.Replace(" ", "").ToLowerInvariant();
-
                 foreach (var role in RoleManager.Instance.AllRoles)
                 {
                     if (role == null) continue;
-
-                    string typeName = role.GetType().Name
-                        .ToLowerInvariant()
-                        .Replace("role", "");
-
-                    if (typeName == normalised)
-                        return role.GetRoleIcon();
-
-                    string displayName = role.NiceName?
-                        .Replace(" ", "")
-                        .ToLowerInvariant() ?? "";
-
-                    if (displayName == normalised)
-                        return role.GetRoleIcon();
+                    string typeName = role.GetType().Name.ToLowerInvariant().Replace("role", "");
+                    if (typeName == normalised) return role.GetRoleIcon();
+                    string displayName = role.NiceName?.Replace(" ", "").ToLowerInvariant() ?? "";
+                    if (displayName == normalised) return role.GetRoleIcon();
                 }
             }
             catch (System.Exception ex)
@@ -267,21 +237,10 @@ namespace DraftModeTOUM
                 DraftModePlugin.Logger.LogWarning(
                     $"[DraftScreenController] GetRoleIcon failed for '{roleName}': {ex.Message}");
             }
-
             return null;
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
-
-        private static void SetTmp(GameObject card, string childName, string text, Color color)
-        {
-            var go = card.transform.Find(childName);
-            if (go == null) return;
-            var tmp = go.GetComponent<TextMeshPro>();
-            if (tmp == null) return;
-            tmp.text  = text;
-            tmp.color = color;
-        }
 
         private static string GetFactionLabel(string roleName) =>
             RoleCategory.GetFaction(roleName) switch
