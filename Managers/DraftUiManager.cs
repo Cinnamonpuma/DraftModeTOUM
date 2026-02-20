@@ -25,8 +25,8 @@ namespace DraftModeTOUM.Managers
                 if (local != null && local.OverrideUiStyle.Value)
                     return local.UseCircleStyle.Value;
 
-                // No host-level override exists — default to Cards
-                return false;
+                // Fall back to whatever the host has set
+                return MiraAPI.GameOptions.OptionGroupSingleton<DraftModeOptions>.Instance.UseCircleStyle;
             }
         }
 

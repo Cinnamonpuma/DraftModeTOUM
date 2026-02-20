@@ -9,6 +9,9 @@ public sealed class DraftModeOptions : AbstractOptionGroup
     public override string GroupName => "Draft Mode";
     public override uint GroupPriority => 100;
 
+    [ModdedToggleOption("Use Circle Style (Off = Cards)")]
+    public bool UseCircleStyle { get; set; } = false;
+
     [ModdedToggleOption("Enable Draft Mode")]
     public bool EnableDraft { get; set; } = true;
 
