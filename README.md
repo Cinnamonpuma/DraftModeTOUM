@@ -4,17 +4,6 @@ A [BepInEx](https://github.com/BepInEx/BepInEx) mod for **Among Us** running [To
 
 ---
 
-## ⚠️ Required Lobby Setup
-
-Before starting a draft the host **must** configure two settings or roles will not assign correctly:
-
-1. **In the TOUM settings page** — set **Role Assignment** to `Vanilla`
-2. **In the regular Among Us settings** — set **Number of Impostors** to `2`
-
-Without these the draft will run but the game will override or conflict with the assigned roles.
-
----
-
 ## Requirements
 
 - Among Us (compatible version with TOUM)
@@ -112,7 +101,6 @@ Draft recap is now: OFF
 |---|---|---|
 | `/draft` | Host only | Starts the draft |
 | `/draftrecap` | Host only | Toggles the end-of-draft recap on/off |
-| `/draftmod` | Host only | Toggles whether players must have DraftModeTOUM installed to join |
 | `1` / `2` / `3` | Active picker | Pick one of the 3 offered roles |
 | `4` | Active picker | Pick a fully random role |
 

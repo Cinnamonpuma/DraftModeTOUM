@@ -1,20 +1,28 @@
-﻿using BepInEx;
+using BepInEx;
 using BepInEx.Logging;
+using BepInEx.Configuration;
 using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
 using Il2CppInterop.Runtime.Injection;
+using DraftModeTOUM.Managers;
 using DraftModeTOUM.Patches;
+using MiraAPI.PluginLoading;
 using UnityEngine;
 
 namespace DraftModeTOUM
 {
     [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
     [BepInDependency("gg.reactor.api", BepInDependency.DependencyFlags.HardDependency)]
+    [BepInDependency("mira.api", BepInDependency.DependencyFlags.HardDependency)]
     [BepInDependency("auavengers.tou.mira", BepInDependency.DependencyFlags.HardDependency)]
-    public class DraftModePlugin : BasePlugin
+    public class DraftModePlugin : BasePlugin, IMiraPlugin
     {
-        public static ManualLogSource Logger;
-        private Harmony _harmony;
+        public static ManualLogSource Logger = null!;
+        private Harmony _harmony = null!;
+
+        public string OptionsTitleText => "Draft Mode";
+
+        public ConfigFile GetConfigFile() => Config;
 
         public override void Load()
         {
@@ -24,17 +32,18 @@ namespace DraftModeTOUM
             try
             {
                 ClassInjector.RegisterTypeInIl2Cpp<DraftTicker>();
-                Logger.LogInfo("DraftTicker registered successfully.");
+                ClassInjector.RegisterTypeInIl2Cpp<DraftScreenController>();
+                ClassInjector.RegisterTypeInIl2Cpp<DraftCircleMinigame>();
+                ClassInjector.RegisterTypeInIl2Cpp<DraftStatusOverlay>();
+                Logger.LogInfo("DraftTicker + DraftScreenController + DraftCircleMinigame + DraftStatusOverlay registered.");
             }
             catch (System.Exception ex)
             {
-                Logger.LogError($"Failed to register DraftTicker: {ex}");
+                Logger.LogError($"Failed to register types: {ex}");
             }
 
             _harmony = new Harmony(PluginInfo.PLUGIN_GUID);
             _harmony.PatchAll();
-
-            // Manually patch internal TOUM class + OnPlayerJoined rejoin guard
             RequireModPatch.Apply(_harmony);
 
             Logger.LogInfo("DraftModeTOUM loaded successfully!");
@@ -49,12 +58,11 @@ namespace DraftModeTOUM
 
     internal static class PluginInfo
     {
-        public const string PLUGIN_GUID = "com.draftmodetoun.mod";
-        public const string PLUGIN_NAME = "DraftModeTOUM";
-        public const string PLUGIN_VERSION = "1.0.3";
+        public const string PLUGIN_GUID    = "com.draftmodetoun.mod";
+        public const string PLUGIN_NAME    = "DraftModeTOUM";
+        public const string PLUGIN_VERSION = "1.0.4";
     }
 
-    // Clear kicked/verified lists when the host disconnects from a lobby
     [HarmonyPatch(typeof(AmongUsClient), nameof(AmongUsClient.OnDisconnected))]
     public static class OnDisconnectPatch
     {
@@ -62,7 +70,34 @@ namespace DraftModeTOUM
         public static void Postfix()
         {
             RequireModPatch.ClearSession();
-            DraftModePlugin.Logger.LogInfo("[DraftModePlugin] Session cleared on disconnect.");
+            DraftScreenController.Hide();
+            DraftUiManager.CloseAll();
+            bool draftStillInProgress = DraftManager.IsDraftActive;
+            DraftManager.Reset(cancelledBeforeCompletion: draftStillInProgress);
+            DraftModePlugin.Logger.LogInfo($"[DraftModePlugin] Session cleared on disconnect.");
+        }
+    }
+
+    [HarmonyPatch(typeof(GameStartManager), nameof(GameStartManager.BeginGame))]
+    public static class BeginGameCleanupPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix()
+        {
+            DraftScreenController.Hide();
+            DraftStatusOverlay.Hide();
+            DraftModePlugin.Logger.LogInfo("[DraftModePlugin] Game started — UI hidden.");
+        }
+    }
+
+    [HarmonyPatch(typeof(IntroCutscene), nameof(IntroCutscene.CoBegin))]
+    public static class IntroCutsceneHidePatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix()
+        {
+            DraftScreenController.Hide();
+            DraftStatusOverlay.Hide();
         }
     }
 }

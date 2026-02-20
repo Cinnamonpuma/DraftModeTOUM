@@ -66,24 +66,36 @@ namespace DraftModeTOUM.Patches
         }
 
 
-        public static void OnPlayerJoinedPostfix(ClientData client)
+        public static void OnPlayerJoinedPostfix(ClientData data)
         {
             if (!AmongUsClient.Instance.AmHost) return;
+            if (data.Id == AmongUsClient.Instance.ClientId) return;
+
+            if (DraftManager.IsDraftActive && DraftManager.LockLobbyOnDraftStart)
+            {
+                DraftModePlugin.Logger.LogInfo(
+                    $"[RequireModPatch] Draft active — kicking client {data.Id} ({data.PlayerName}).");
+
+                DraftManager.SendChatLocal(
+                    $"<color=#FF4444>{data.PlayerName} was kicked — draft has already started.</color>");
+
+                _kickedClients.Add(data.Id);
+                AmongUsClient.Instance.KickPlayer(data.Id, false);
+                return;
+            }
+
             if (!RequireDraftMod) return;
 
 
-            if (client.Id == AmongUsClient.Instance.ClientId) return;
-
-
-            if (_kickedClients.Contains(client.Id))
+            if (_kickedClients.Contains(data.Id))
             {
                 DraftModePlugin.Logger.LogInfo(
-                    $"[RequireModPatch] Previously kicked client {client.Id} ({client.PlayerName}) rejoined — kicking again.");
+                    $"[RequireModPatch] Previously kicked client {data.Id} ({data.PlayerName}) rejoined — kicking again.");
 
                 DraftManager.SendChatLocal(
-                    $"<color=#FF4444>{client.PlayerName} was kicked — {MOD_NAME} v{PluginInfo.PLUGIN_VERSION} required.</color>");
+                    $"<color=#FF4444>{data.PlayerName} was kicked — {MOD_NAME} v{PluginInfo.PLUGIN_VERSION} required.</color>");
 
-                AmongUsClient.Instance.KickPlayer(client.Id, false);
+                AmongUsClient.Instance.KickPlayer(data.Id, false);
             }
         }
 

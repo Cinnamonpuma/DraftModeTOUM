@@ -5,7 +5,7 @@ namespace DraftModeTOUM
 {
     public class DraftTicker : MonoBehaviour
     {
-        private static DraftTicker _instance;
+        private static DraftTicker? _instance;
 
         public static void EnsureExists()
         {
