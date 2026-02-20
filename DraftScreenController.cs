@@ -111,8 +111,13 @@ namespace DraftModeTOUM
                     ? RoleColors.RandomColour
                     : RoleColors.GetColor(roleName);
 
-                var card = Instantiate(cardTemplate, rolesHolder);
-                card.SetActive(true);
+                // Inside the 'for (int i = 0; i < 4; i++)' loop:
+var card = Instantiate(cardTemplate, rolesHolder);
+card.SetActive(true);
+
+// ADD THIS LINE: 
+// 1.5f is the distance. Lower it (e.g., 1.2f) to make them even closer.
+card.transform.localPosition = new Vector3((i - 1.5f) * 1.5f, 0, 0);
                 card.name = $"DraftCard_{i}";
 
                 // RoleName text — coloured to role colour
