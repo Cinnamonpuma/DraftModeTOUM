@@ -278,13 +278,8 @@ namespace DraftModeTOUM.Managers
             foreach (var slot in TurnOrder)
             {
                 var s     = GetStateForSlot(slot);
-                string fc = RoleCategory.GetFaction(s.ChosenRole) switch
-                {
-                    RoleFaction.Impostor => "#FF4444",
-                    RoleFaction.Neutral  => "#AA44FF",
-                    _                    => "#4BD7E4"
-                };
-                sb.AppendLine($"Player {s.SlotNumber}: <color={fc}>{s.ChosenRole}</color>");
+                
+                sb.AppendLine($"Player {s.SlotNumber}: #{s.ChosenRole}");
             }
             return sb.ToString();
         }
