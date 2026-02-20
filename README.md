@@ -100,43 +100,13 @@ Draft recap is now: OFF
 | Command | Who | Description |
 |---|---|---|
 | `/draft` | Host only | Starts the draft |
-| `/draftrecap` | Host only | Toggles the end-of-draft recap on/off |
-| `1` / `2` / `3` | Active picker | Pick one of the 3 offered roles |
-| `4` | Active picker | Pick a fully random role |
+| `/draftend` | Host Only | Ends the current active draft | 
 
 ---
 
 ## Role Pool
 
-The draft draws from a fixed list of all TOUM roles. Every draft pick is chosen from this pool, with already-picked roles removed so no two players get the same role.
-
-The current pool includes:
-
-**Crew — Investigative:** Aurial, Forensic, Lookout, Mystic, Seer, Snitch, Sonar, Trapper
-
-**Crew — Killing:** Deputy, Hunter, Sheriff, Veteran, Vigilante
-
-**Crew — Power:** Jailor, Monarch, Politician, Prosecutor, Swapper, Time Lord
-
-**Crew — Protective:** Altruist, Cleric, Medic, Mirrorcaster, Oracle, Warden
-
-**Crew — Support:** Engineer, Imitator, Medium, Plumber, Sentry, Transporter
-
-**Impostor — Concealing:** Eclipsal, Escapist, Grenadier, Morphling, Swooper, Venerer
-
-**Impostor — Killing:** Ambusher, Bomber, Parasite, Scavenger, Warlock
-
-**Impostor — Power:** Ambassador, Puppeteer, Spellslinger
-
-**Impostor — Support:** Blackmailer, Hypnotist, Janitor, Miner, Undertaker
-
-**Neutral — Benign:** Fairy, Mercenary, Survivor
-
-**Neutral — Evil:** Doomsayer, Executioner, Jester
-
-**Neutral — Killing:** Arsonist, Glitch, Juggernaut, Plaguebearer, Soul Collector, Vampire, Werewolf
-
-**Neutral — Outlier:** Chef, Inquisitor
+The roles that can be chosen are now controlled by the roles and there chances in the TOUM Role Settings set by the lobby's designated host.
 
 ---
 
