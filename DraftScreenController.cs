@@ -22,6 +22,12 @@ namespace DraftModeTOUM
 
         private const string PrefabName = "SelectRoleGame";
 
+        // ── Card spacing ──────────────────────────────────────────────────────
+        // Adjust this value to control gap between cards.
+        // If cards use a RectTransform (Canvas UI), this is in pixels (try 150–200).
+        // If cards are plain world-space objects, this is in Unity units (try 1.2–2.0).
+        public static float CardSpacing = 150f;
+
         // ── Public API ────────────────────────────────────────────────────────
 
         public static void Show(string[] offeredRoles)
@@ -99,6 +105,17 @@ namespace DraftModeTOUM
                 return;
             }
 
+            // Disable any layout group on the holder so it doesn't override our positions
+            if (holderGo != null)
+            {
+                var layoutGroup = holderGo.GetComponent<UnityEngine.UI.LayoutGroup>();
+                if (layoutGroup != null)
+                {
+                    layoutGroup.enabled = false;
+                    DraftModePlugin.Logger.LogInfo("[DraftScreenController] Disabled LayoutGroup on RoleCardHolder.");
+                }
+            }
+
             // 4. Spawn 4 cards
             for (int i = 0; i < 4; i++)
             {
@@ -111,9 +128,33 @@ namespace DraftModeTOUM
                     ? RoleColors.RandomColour
                     : RoleColors.GetColor(roleName);
 
-                var card = Instantiate(cardTemplate, rolesHolder);
+                var card = Instantiate(cardTemplate, holderGo != null ? holderGo : rolesHolder);
                 card.SetActive(true);
                 card.name = $"DraftCard_{i}";
+
+                // ── Position the card ─────────────────────────────────────────
+                // Cards are centred around 0. With 4 cards the offsets are:
+                //   i=0 → -1.5 * spacing
+                //   i=1 → -0.5 * spacing
+                //   i=2 → +0.5 * spacing
+                //   i=3 → +1.5 * spacing
+                var rt = card.GetComponent<RectTransform>();
+                if (rt != null)
+                {
+                    // Canvas / UI path — use anchoredPosition (pixel space)
+                    rt.anchoredPosition = new Vector2((i - 1.5f) * CardSpacing, 0f);
+                    DraftModePlugin.Logger.LogInfo(
+                        $"[DraftScreenController] Card {i} anchoredPosition set to {rt.anchoredPosition}");
+                }
+                else
+                {
+                    // World-space path — use localPosition (Unity units)
+                    // CardSpacing is in pixels above, so divide by 100 for a sensible world-unit value.
+                    float worldSpacing = CardSpacing / 100f;
+                    card.transform.localPosition = new Vector3((i - 1.5f) * worldSpacing, 0f, 0f);
+                    DraftModePlugin.Logger.LogInfo(
+                        $"[DraftScreenController] Card {i} localPosition set to {card.transform.localPosition}");
+                }
 
                 // RoleName text — coloured to role colour
                 SetTmp(card, "RoleName", roleName, roleColour);
