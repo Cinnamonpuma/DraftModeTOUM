@@ -128,8 +128,18 @@ namespace DraftModeTOUM
                     ? RoleColors.RandomColour
                     : RoleColors.GetColor(roleName);
 
+<<<<<<< HEAD
                 var card = Instantiate(cardTemplate, holderGo != null ? holderGo : rolesHolder);
                 card.SetActive(true);
+=======
+                // Inside the 'for (int i = 0; i < 4; i++)' loop:
+var card = Instantiate(cardTemplate, rolesHolder);
+card.SetActive(true);
+
+// ADD THIS LINE: 
+// 1.5f is the distance. Lower it (e.g., 1.2f) to make them even closer.
+card.transform.localPosition = new Vector3((i - 1.5f) * 1.5f, 0, 0);
+>>>>>>> c71188baadbb1f75106dafc4c98991ed973d3412
                 card.name = $"DraftCard_{i}";
 
                 // ── Position the card ─────────────────────────────────────────
