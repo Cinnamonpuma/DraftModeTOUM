@@ -100,10 +100,10 @@ namespace DraftModeTOUM.Patches
             if (_verifiedClients.Contains(playerInfo.ClientId)) return;
 
             bool hasMod = list.Values.Any(v =>
-                v.Contains(MOD_NAME, StringComparison.OrdinalIgnoreCase));
+    v.IndexOf(MOD_NAME, StringComparison.OrdinalIgnoreCase) >= 0);
 
-            bool hasCorrectVersion = list.Values.Any(v =>
-                v.Contains(RequiredEntry, StringComparison.OrdinalIgnoreCase));
+bool hasCorrectVersion = list.Values.Any(v =>
+    v.IndexOf(RequiredEntry, StringComparison.OrdinalIgnoreCase) >= 0);
 
             if (hasCorrectVersion)
             {
