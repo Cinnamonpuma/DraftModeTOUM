@@ -80,7 +80,6 @@ namespace DraftModeTOUM.Managers
                 "executioner"  => new Color32(99,  59,  31,  255),
                 "inquisitor"   => new Color32(217, 66,  145, 255),
                 "jester"       => new Color32(255, 191, 204, 255),
-                "spectre"      => new Color32(102, 41,  97,  255),
                 // Neutral Killing
                 "arsonist"     => new Color32(255, 77,  0,   255),
                 "glitch"       => Color.green,
