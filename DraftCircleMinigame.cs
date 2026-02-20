@@ -33,6 +33,7 @@ public sealed class DraftCircleMinigame : Minigame
 
     private List<DraftRoleCard>? _cards;
     private Action<int>?         _onPick;
+    private bool                 _hasPicked;
 
     public DraftCircleMinigame(IntPtr cppPtr) : base(cppPtr) { }
 
@@ -103,6 +104,7 @@ public sealed class DraftCircleMinigame : Minigame
         DraftModePlugin.Logger.LogInfo($"[DraftCircleMinigame] Open() called with {cards.Count} cards.");
         _cards      = cards;
         _onPick     = onPick;
+        _hasPicked  = false;
         RoleCount   = cards.Count + 1;
         CurrentCard = 0;
         Coroutines.Start(CoOpen(this));
@@ -118,10 +120,13 @@ public sealed class DraftCircleMinigame : Minigame
 
     public override void Close()
     {
-        HudManager.Instance.StartCoroutine(HudManager.Instance.CoFadeFullScreen(_bgColor, Color.clear));
+        _hasPicked  = true;
         CurrentCard = -1;
         RoleCount   = -1;
-        MinigameStubs.Close(this);
+        // Kill the red screen overlay immediately, then hide and destroy
+        try { HudManager.Instance?.FullScreen?.gameObject?.SetActive(false); } catch { }
+        gameObject.SetActive(false);
+        UnityEngine.Object.Destroy(gameObject);
     }
 
     [HideFromIl2Cpp]
@@ -178,15 +183,16 @@ public sealed class DraftCircleMinigame : Minigame
                 btn.OnClick.RemoveAllListeners();
                 btn.OnClick.AddListener(new Action(() =>
                 {
-                    _onPick?.Invoke(capturedIndex);
-                    Close();
+                    if (_hasPicked) return;
+                    _hasPicked = true;
+                    var cb = _onPick;
+                    _onPick = null;  // prevent any second invocation
+                    cb?.Invoke(capturedIndex);
                 }));
             }
         }
 
         Coroutines.Start(CoAnimateCards());
-        TransType = TransitionType.None;
-        MinigameStubs.Begin(this, null);
         DraftModePlugin.Logger.LogInfo("[DraftCircleMinigame] Begin() complete.");
     }
 
