@@ -116,7 +116,7 @@ namespace DraftModeTOUM.Managers
             return new[]
             {
                 "Aurial","Forensic","Lookout","Mystic","Seer",
-                "Snitch","Sonar","Trapper", "Deputy","Hunter","Sheriff",
+                "Snitch","Sonar","Trapper", "Deputy", "Sheriff",
                 "Veteran","Vigilante", "Jailor","Monarch","Politician",
                 "Prosecutor","Swapper","Time Lord", "Altruist","Cleric","Medic",
                 "Mirrorcaster","Oracle","Warden", "Engineer","Imitator","Medium",

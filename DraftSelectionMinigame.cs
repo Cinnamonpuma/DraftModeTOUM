@@ -196,9 +196,9 @@ namespace DraftModeTOUM
             float spacing   = usableW / row0Count;          // centre-to-centre gap
             // Card prefab is ~1.75 world units wide at scale 1
             float cardScale = Mathf.Clamp(spacing / 1.75f * 0.80f, 0.15f, 0.46f);
-            float rowGap    = screenH * 0.44f;              // vertical gap between rows
+            float rowGap    = screenH * 0.32f;              // vertical gap between rows
 
-            float row0Y = hasSecondRow ?  rowGap * 0.28f : -0.05f;
+            float row0Y = hasSecondRow ?  rowGap * 0.20f : -0.05f;
             float row1Y = row0Y - rowGap;
 
             // ── Spawn ───────────────────────────────────────────
