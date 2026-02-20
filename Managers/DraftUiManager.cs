@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using DraftModeTOUM.Patches;
+using MiraAPI.LocalSettings;
 using MiraAPI.Roles;
 using MiraAPI.Utilities;
 using TownOfUs.Assets;
@@ -15,8 +16,19 @@ namespace DraftModeTOUM.Managers
         // Circle-style minigame instance (only used when UseCircleStyle is on)
         private static DraftCircleMinigame? _circleMinigame;
 
-        private static bool UseCircle =>
-            MiraAPI.GameOptions.OptionGroupSingleton<DraftModeOptions>.Instance.UseCircleStyle;
+        private static bool UseCircle
+        {
+            get
+            {
+                // Local override takes priority — lets each player choose their own UI
+                var local = MiraAPI.LocalSettings.LocalSettingsTabSingleton<DraftModeLocalSettings>.Instance;
+                if (local != null && local.OverrideUiStyle.Value)
+                    return local.UseCircleStyle.Value;
+
+                // No host-level override exists — default to Cards
+                return false;
+            }
+        }
 
         public static void ShowPicker(List<string> roles)
         {

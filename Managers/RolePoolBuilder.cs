@@ -77,9 +77,10 @@ namespace DraftModeTOUM.Managers
                 if (count <= 0 || chance <= 0) continue;
 
                 var roleName = role.GetRoleName();
+                // Use RoleCategory for neutrals so killing vs passive is correctly split
                 var faction = role.IsImpostor()
                     ? RoleFaction.Impostor
-                    : (role.IsNeutral() ? RoleFaction.Neutral : RoleFaction.Crewmate);
+                    : (role.IsNeutral() ? RoleCategory.GetFaction(roleName) : RoleFaction.Crewmate);
 
                 AddRole(pool, roleName, count, chance, faction);
             }

@@ -6,8 +6,11 @@ namespace DraftModeTOUM.Managers
     {
         Crewmate,
         Impostor,
-        Neutral
+        Neutral,
+        NeutralKilling
     }
+
+    // ROLES BELOW ARE IMPOSTOR ROLES.
 
     public static class RoleCategory
     {
@@ -23,14 +26,17 @@ namespace DraftModeTOUM.Managers
             "Blackmailer", "Hypnotist", "Janitor", "Miner", "Undertaker"
         };
 
-        private static readonly HashSet<string> NeutralRoles = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
+        private static readonly HashSet<string> NeutralKillingRoles = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
+        {
+            "Arsonist", "Glitch", "Juggernaut", "Plaguebearer", "Pestilence", "SoulCollector", "Vampire", "Werewolf"
+        };
+
+        private static readonly HashSet<string> NeutralOtherRoles = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
         {
             // Benign
             "Amnesiac", "Fairy", "Mercenary", "Survivor",
             // Evil
             "Doomsayer", "Executioner", "Jester", "Spectre",
-            // Killing
-            "Arsonist", "Glitch", "Juggernaut", "Plaguebearer", "Pestilence", "SoulCollector", "Vampire", "Werewolf",
             // Outlier
             "Chef", "Inquisitor"
         };
@@ -38,13 +44,15 @@ namespace DraftModeTOUM.Managers
         public static RoleFaction GetFaction(string roleName)
         {
             var normalized = Normalize(roleName);
-            if (ImpostorRoles.Contains(normalized)) return RoleFaction.Impostor;
-            if (NeutralRoles.Contains(normalized)) return RoleFaction.Neutral;
+            if (ImpostorRoles.Contains(normalized))      return RoleFaction.Impostor;
+            if (NeutralKillingRoles.Contains(normalized)) return RoleFaction.NeutralKilling;
+            if (NeutralOtherRoles.Contains(normalized)) return RoleFaction.Neutral;
             return RoleFaction.Crewmate;
         }
 
-        public static bool IsImpostor(string roleName) => ImpostorRoles.Contains(Normalize(roleName));
-        public static bool IsNeutral(string roleName) => NeutralRoles.Contains(Normalize(roleName));
+        public static bool IsImpostor(string roleName)       => ImpostorRoles.Contains(Normalize(roleName));
+        public static bool IsNeutralKilling(string roleName) => NeutralKillingRoles.Contains(Normalize(roleName));
+        public static bool IsNeutral(string roleName)        => NeutralOtherRoles.Contains(Normalize(roleName));
 
         private static string Normalize(string roleName)
         {

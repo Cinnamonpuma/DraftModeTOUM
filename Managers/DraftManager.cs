@@ -37,11 +37,13 @@ namespace DraftModeTOUM.Managers
         public static bool UseRoleChances { get; set; } = true;
 
         // ── Faction caps — change these to adjust limits ─────────────────────
-        public static int MaxImpostors { get; set; } = 2;
-        public static int MaxNeutrals { get; set; } = 3;
+        public static int MaxImpostors       { get; set; } = 2;
+        public static int MaxNeutralKillings { get; set; } = 2;
+        public static int MaxNeutralPassives { get; set; } = 3;
 
-        private static int _impostorsDrafted = 0;
-        private static int _neutralsDrafted = 0;
+        private static int _impostorsDrafted      = 0;
+        private static int _neutralKillingsDrafted = 0;
+        private static int _neutralPassivesDrafted = 0;
 
 
         public static List<int> TurnOrder { get; private set; } = new List<int>();
@@ -174,8 +176,9 @@ namespace DraftModeTOUM.Managers
             _roleFactions.Clear();
             TurnOrder.Clear();
 
-            _impostorsDrafted = 0;
-            _neutralsDrafted = 0;
+            _impostorsDrafted       = 0;
+            _neutralKillingsDrafted  = 0;
+            _neutralPassivesDrafted  = 0;
             // Only wipe UpCommandRequests if we're cancelling before roles were applied.
             // If ApplyAllRoles() already ran, leave the requests intact so TOU-Mira's
             // SelectRoles patch can read them when the game actually starts.
@@ -199,8 +202,9 @@ namespace DraftModeTOUM.Managers
             {
                 if (GetDraftedCount(r) >= GetMaxCount(r)) return false;
                 var faction = GetFaction(r);
-                if (faction == RoleFaction.Impostor && _impostorsDrafted >= MaxImpostors) return false;
-                if (faction == RoleFaction.Neutral && _neutralsDrafted >= MaxNeutrals) return false;
+                if (faction == RoleFaction.Impostor       && _impostorsDrafted      >= MaxImpostors)       return false;
+                if (faction == RoleFaction.NeutralKilling && _neutralKillingsDrafted >= MaxNeutralKillings) return false;
+                if (faction == RoleFaction.Neutral        && _neutralPassivesDrafted  >= MaxNeutralPassives) return false;
                 return true;
             }).ToList();
         }
@@ -220,19 +224,18 @@ namespace DraftModeTOUM.Managers
             }
             else
             {
-                // Try to offer variety: up to 1 impostor and 1 neutral in the 3 options,
-                // only if their caps haven't been reached yet
+                // Offer variety: try 1 impostor, 1 neutral (killing or passive), 1 crew
                 var impostorOffer = PickWeightedUnique(
-                    available.Where(r => GetFaction(r) == RoleFaction.Impostor).ToList(),
-                    1);
+                    available.Where(r => GetFaction(r) == RoleFaction.Impostor).ToList(), 1);
 
-                var neutralOffer = PickWeightedUnique(
-                    available.Where(r => GetFaction(r) == RoleFaction.Neutral).ToList(),
-                    1);
+                // Pick one neutral slot — prefer killing if available, otherwise passive
+                var nkPool = available.Where(r => GetFaction(r) == RoleFaction.NeutralKilling).ToList();
+                var npPool = available.Where(r => GetFaction(r) == RoleFaction.Neutral).ToList();
+                var neutralOffer = nkPool.Count > 0
+                    ? PickWeightedUnique(nkPool, 1)
+                    : PickWeightedUnique(npPool, 1);
 
-                var crewOffer = available
-                    .Where(r => GetFaction(r) == RoleFaction.Crewmate)
-                    .ToList();
+                var crewOffer = available.Where(r => GetFaction(r) == RoleFaction.Crewmate).ToList();
 
                 var offered = new List<string>();
                 offered.AddRange(impostorOffer);
@@ -295,12 +298,15 @@ namespace DraftModeTOUM.Managers
 
             // Update faction counters
             var faction = GetFaction(roleName);
-            if (faction == RoleFaction.Impostor) _impostorsDrafted++;
-            else if (faction == RoleFaction.Neutral) _neutralsDrafted++;
+            if (faction == RoleFaction.Impostor)       _impostorsDrafted++;
+            else if (faction == RoleFaction.NeutralKilling) _neutralKillingsDrafted++;
+            else if (faction == RoleFaction.Neutral)        _neutralPassivesDrafted++;
 
             DraftModePlugin.Logger.LogInfo(
                 $"[DraftManager] '{roleName}' drafted ({faction}). " +
-                $"Impostors: {_impostorsDrafted}/{MaxImpostors}, Neutrals: {_neutralsDrafted}/{MaxNeutrals}");
+                $"Impostors: {_impostorsDrafted}/{MaxImpostors}, " +
+                $"NK: {_neutralKillingsDrafted}/{MaxNeutralKillings}, " +
+                $"NP: {_neutralPassivesDrafted}/{MaxNeutralPassives}");
 
             CurrentTurn++;
 
@@ -342,9 +348,10 @@ namespace DraftModeTOUM.Managers
                 string role = s.ChosenRole ?? "?";
                 string color = GetFaction(role) switch
                 {
-                    RoleFaction.Impostor => "#FF4444",
-                    RoleFaction.Neutral => "#AA44FF",
-                    _ => "#4BD7E4"
+                    RoleFaction.Impostor       => "#FF4444",
+                    RoleFaction.NeutralKilling => "#FF8800",
+                    RoleFaction.Neutral        => "#AA44FF",
+                    _                          => "#4BD7E4"
                 };
                 sb.AppendLine($"Player {s.SlotNumber}: <color={color}>{role}</color>");
             }
@@ -407,8 +414,9 @@ namespace DraftModeTOUM.Managers
             AutoStartAfterDraft   = opts.AutoStartAfterDraft;
             LockLobbyOnDraftStart = opts.LockLobbyOnDraftStart;
             UseRoleChances    = opts.UseRoleChances;
-            MaxImpostors      = Mathf.Clamp(Mathf.RoundToInt(opts.MaxImpostors), 0, 10);
-            MaxNeutrals       = Mathf.Clamp(Mathf.RoundToInt(opts.MaxNeutrals),  0, 15);
+            MaxImpostors       = Mathf.Clamp(Mathf.RoundToInt(opts.MaxImpostors),       0, 10);
+            MaxNeutralKillings = Mathf.Clamp(Mathf.RoundToInt(opts.MaxNeutralKillings),  0, 10);
+            MaxNeutralPassives = Mathf.Clamp(Mathf.RoundToInt(opts.MaxNeutralPassives),  0, 10);
         }
 
         private static int GetDraftedCount(string roleName)

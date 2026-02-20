@@ -9,9 +9,6 @@ public sealed class DraftModeOptions : AbstractOptionGroup
     public override string GroupName => "Draft Mode";
     public override uint GroupPriority => 100;
 
-    [ModdedToggleOption("Use Circle Style (Off = Cards)")]
-    public bool UseCircleStyle { get; set; } = false;
-
     [ModdedToggleOption("Enable Draft Mode")]
     public bool EnableDraft { get; set; } = true;
 
@@ -33,6 +30,9 @@ public sealed class DraftModeOptions : AbstractOptionGroup
     [ModdedNumberOption("Max Impostors", 0f, 5f, 1f, MiraNumberSuffixes.None, "0")]
     public float MaxImpostors { get; set; } = 2f;
 
-    [ModdedNumberOption("Max Neutrals", 0f, 10f, 1f, MiraNumberSuffixes.None, "0")]
-    public float MaxNeutrals { get; set; } = 3f;
+    [ModdedNumberOption("Max Neutral Killings", 0f, 10f, 1f, MiraNumberSuffixes.None, "0")]
+    public float MaxNeutralKillings { get; set; } = 2f;
+
+    [ModdedNumberOption("Max Neutral Other", 0f, 10f, 1f, MiraNumberSuffixes.None, "0")]
+    public float MaxNeutralPassives { get; set; } = 3f;
 }
