@@ -18,7 +18,7 @@ namespace DraftModeTOUM
         private TextMeshPro _statusText;
 
         // The solid navy we snap to and hold — matches the card background colour exactly
-        private static readonly Color NavyColor = new Color(0.04f, 0.07f, 0.20f, 1f);
+        private static readonly Color NavyColor = new Color(0f, 0f, 0f, 0.65f);
 
         private const string PrefabName = "SelectRoleGame";
         public static float  CardZSpacing = 0.5f;
