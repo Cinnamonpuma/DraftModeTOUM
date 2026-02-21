@@ -100,7 +100,14 @@ Draft recap is now: OFF
 | Command | Who | Description |
 |---|---|---|
 | `/draft` | Host only | Starts the draft |
+| `/draftrecap` | Host only | Toggles Draft Recap
 | `/draftend` | Host Only | Ends the current active draft | 
+
+---
+
+## Local Settings
+
+If you go to settings and click on `Mira Draft`turn on override, no matter hosts settings it will always be cards. If you set `Use Circle Style` to true it will always use the circle UI, no matter the hosts settings.
 
 ---
 
