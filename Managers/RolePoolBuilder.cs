@@ -89,7 +89,7 @@ namespace DraftModeTOUM.Managers
         // Roles that can never be drafted no matter what the host configures
         private static readonly HashSet<string> _bannedRoles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "Haunter", "Spectre", "Teleporter", "Pestilence"
+            "Haunter", "Spectre", "Teleporter", "Pestilence", "Traitor", "Mayor"
         };
 
         public static bool IsBannedRole(string roleName) => _bannedRoles.Contains(roleName);
