@@ -13,19 +13,16 @@ namespace DraftModeTOUM.Managers
 {
     public static class DraftUiManager
     {
-        // Circle-style minigame instance (only used when UseCircleStyle is on)
         private static DraftCircleMinigame? _circleMinigame;
 
         private static bool UseCircle
         {
             get
             {
-                // Local override takes priority — lets each player choose their own UI
                 var local = MiraAPI.LocalSettings.LocalSettingsTabSingleton<DraftModeLocalSettings>.Instance;
                 if (local != null && local.OverrideUiStyle.Value)
                     return local.UseCircleStyle.Value;
 
-                // Fall back to whatever the host has set
                 return MiraAPI.GameOptions.OptionGroupSingleton<DraftModeOptions>.Instance.UseCircleStyle;
             }
         }
@@ -34,7 +31,8 @@ namespace DraftModeTOUM.Managers
         {
             if (HudManager.Instance == null || roles == null || roles.Count == 0) return;
 
-            DraftStatusOverlay.Hide();
+            // Hide the text but keep the solid black background active
+            DraftStatusOverlay.SetState(OverlayState.BackgroundOnly);
 
             if (UseCircle)
             {
@@ -53,15 +51,12 @@ namespace DraftModeTOUM.Managers
             {
                 _circleMinigame.RefreshTurnList();
             }
-            // Cards style has no turn list panel
         }
 
         public static void CloseAll()
         {
-            // Close cards style
             DraftScreenController.Hide();
 
-            // Close circle style — grab ref and null immediately so re-entrant calls are no-ops
             var circle = _circleMinigame;
             _circleMinigame = null;
             if (circle != null)
@@ -73,32 +68,23 @@ namespace DraftModeTOUM.Managers
                     if (alive) circle.Close();
                     else
                     {
-                        // Was never opened (still inactive) — just destroy it
                         bool exists = false;
                         try { exists = circle.gameObject != null; } catch { }
                         if (exists) UnityEngine.Object.Destroy(circle.gameObject);
                     }
                 }
-                catch (Exception ex)
-                {
-                    DraftModePlugin.Logger.LogWarning($"[DraftUiManager] Circle CloseAll exception (safe to ignore): {ex.Message}");
-                }
+                catch { }
             }
 
             if (DraftManager.IsDraftActive)
-                DraftStatusOverlay.Show();
+                DraftStatusOverlay.SetState(OverlayState.Waiting);
         }
-
-        // ── Circle helpers ────────────────────────────────────────────────────
 
         private static void ShowCircle(List<string> roles)
         {
             EnsureCircleMinigame();
-            if (_circleMinigame == null)
-            {
-                DraftModePlugin.Logger.LogError("[DraftUiManager] Cannot show circle — minigame failed to create.");
-                return;
-            }
+            if (_circleMinigame == null) return;
+
             var cards = BuildCards(roles);
             _circleMinigame.Open(cards, OnPickSelected);
         }
@@ -118,8 +104,6 @@ namespace DraftModeTOUM.Managers
 
         private static void OnPickSelected(int index)
         {
-            // Close and destroy the circle immediately, THEN send pick
-            // (SendPickToHost → CloseAll will see null and skip circle cleanly)
             var circle = _circleMinigame;
             _circleMinigame = null;
             try { circle?.Close(); } catch { }
@@ -132,13 +116,12 @@ namespace DraftModeTOUM.Managers
             for (int i = 0; i < roles.Count; i++)
             {
                 string roleName = roles[i];
-                var role   = FindRoleByName(roleName);
+                var role = FindRoleByName(roleName);
                 string team = role != null ? MiscUtils.GetParsedRoleAlignment(role) : "Unknown";
-                var icon  = GetRoleIcon(role);
+                var icon = GetRoleIcon(role);
                 var color = GetRoleColor(role);
                 cards.Add(new DraftRoleCard(roleName, team, icon, color, i));
             }
-            // Random card only added when host setting is on; index = roles.Count
             if (DraftManager.ShowRandomOption)
                 cards.Add(new DraftRoleCard("Random", "Random", TouRoleIcons.RandomAny.LoadAsset(), Color.white, roles.Count));
             return cards;

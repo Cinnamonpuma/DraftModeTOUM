@@ -38,8 +38,8 @@ namespace DraftModeTOUM
                 ClassInjector.RegisterTypeInIl2Cpp<DraftScreenController>();
                 ClassInjector.RegisterTypeInIl2Cpp<DraftCircleMinigame>();
                 ClassInjector.RegisterTypeInIl2Cpp<DraftStatusOverlay>();
-                ClassInjector.RegisterTypeInIl2Cpp<CoroutineRunner>();
-                Logger.LogInfo("DraftTicker + DraftScreenController + DraftCircleMinigame + DraftStatusOverlay + CoroutineRunner registered.");
+                ClassInjector.RegisterTypeInIl2Cpp<DraftRecapOverlay>();
+                Logger.LogInfo("Draft UI Components registered.");
             }
             catch (System.Exception ex)
             {
@@ -48,6 +48,7 @@ namespace DraftModeTOUM
 
             _harmony = new Harmony(PluginInfo.PLUGIN_GUID);
             _harmony.PatchAll();
+            RequireModPatch.Apply(_harmony);
 
             Logger.LogInfo("DraftModeTOUM loaded successfully!");
         }
@@ -61,8 +62,8 @@ namespace DraftModeTOUM
 
     internal static class PluginInfo
     {
-        public const string PLUGIN_GUID    = "com.draftmodetoun.mod";
-        public const string PLUGIN_NAME    = "DraftModeTOUM";
+        public const string PLUGIN_GUID = "com.draftmodetoun.mod";
+        public const string PLUGIN_NAME = "DraftModeTOUM";
         public const string PLUGIN_VERSION = "1.0.4";
     }
 
@@ -72,8 +73,10 @@ namespace DraftModeTOUM
         [HarmonyPostfix]
         public static void Postfix()
         {
+            RequireModPatch.ClearSession();
             DraftScreenController.Hide();
             DraftUiManager.CloseAll();
+            DraftRecapOverlay.Hide();
             bool draftStillInProgress = DraftManager.IsDraftActive;
             DraftManager.Reset(cancelledBeforeCompletion: draftStillInProgress);
             DraftModePlugin.Logger.LogInfo($"[DraftModePlugin] Session cleared on disconnect.");
@@ -87,8 +90,9 @@ namespace DraftModeTOUM
         public static void Postfix()
         {
             DraftScreenController.Hide();
-            DraftStatusOverlay.Hide();
-            DraftModePlugin.Logger.LogInfo("[DraftModePlugin] Game started — UI hidden.");
+            // Do NOT hide DraftStatusOverlay here to avoid lobby flash.
+            DraftRecapOverlay.Hide();
+            DraftModePlugin.Logger.LogInfo("[DraftModePlugin] Game starting...");
         }
     }
 
@@ -98,8 +102,23 @@ namespace DraftModeTOUM
         [HarmonyPrefix]
         public static void Prefix()
         {
+            // Backup method: Hides overlay when "Shhh" screen appears
             DraftScreenController.Hide();
-            DraftStatusOverlay.Hide();
+            DraftStatusOverlay.SetState(OverlayState.Hidden);
+            DraftRecapOverlay.Hide();
+        }
+    }
+
+    [HarmonyPatch(typeof(ShipStatus), nameof(ShipStatus.Start))]
+    public static class ShipStatusStartPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix()
+        {
+            // Ultimate backup: Hides overlay when map loads
+            DraftScreenController.Hide();
+            DraftStatusOverlay.SetState(OverlayState.Hidden);
+            DraftRecapOverlay.Hide();
         }
     }
 }

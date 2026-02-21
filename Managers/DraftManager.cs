@@ -1,4 +1,5 @@
 ﻿using AmongUs.GameOptions;
+using DraftModeTOUM;
 using DraftModeTOUM.Patches;
 using MiraAPI.Utilities;
 using HarmonyLib;
@@ -35,18 +36,19 @@ namespace DraftModeTOUM.Managers
         public static bool AutoStartAfterDraft { get; set; } = true;
         public static bool LockLobbyOnDraftStart { get; set; } = true;
         public static bool UseRoleChances { get; set; } = true;
-        public static int  OfferedRolesCount { get; set; } = 3;
-        public static bool ShowRandomOption  { get; set; } = true;
+        public static int OfferedRolesCount { get; set; } = 3;
+        public static bool ShowRandomOption { get; set; } = true;
 
         // ── Faction caps — change these to adjust limits ─────────────────────
-        public static int MaxImpostors       { get; set; } = 2;
+        public static int MaxImpostors { get; set; } = 2;
         public static int MaxNeutralKillings { get; set; } = 2;
         public static int MaxNeutralPassives { get; set; } = 3;
 
-        private static int _impostorsDrafted      = 0;
+        private static int _impostorsDrafted = 0;
         private static int _neutralKillingsDrafted = 0;
         private static int _neutralPassivesDrafted = 0;
 
+        internal static bool SkipCountdown { get; private set; } = false;
 
         public static List<int> TurnOrder { get; private set; } = new List<int>();
         private static Dictionary<int, PlayerDraftState> _slotMap = new Dictionary<int, PlayerDraftState>();
@@ -71,7 +73,6 @@ namespace DraftModeTOUM.Managers
             if (AmongUsClient.Instance.AmHost) return;
             CurrentTurn = turnNumber;
             TurnTimeLeft = TurnDuration;
-            // Update IsPickingNow flags so the turn list renders correctly on clients
             foreach (var state in _slotMap.Values)
             {
                 state.IsPickingNow = (state.SlotNumber == currentPickerSlot);
@@ -82,6 +83,8 @@ namespace DraftModeTOUM.Managers
 
         public static void SetDraftStateFromHost(int totalSlots, List<byte> playerIds, List<int> slotNumbers)
         {
+            ApplyLocalSettings();
+
             _slotMap.Clear();
             _pidToSlot.Clear();
             TurnOrder.Clear();
@@ -97,8 +100,7 @@ namespace DraftModeTOUM.Managers
             CurrentTurn = 1;
             TurnTimeLeft = TurnDuration;
 
-            // Show the center-screen overlay on all clients
-            DraftStatusOverlay.Show();
+            DraftStatusOverlay.SetState(OverlayState.Waiting);
         }
 
         public static void StartDraft()
@@ -106,7 +108,7 @@ namespace DraftModeTOUM.Managers
             if (!AmongUsClient.Instance.AmHost) return;
             if (AmongUsClient.Instance.GameState != InnerNet.InnerNetClient.GameStates.Joined) return;
             DraftTicker.EnsureExists();
-            Reset(cancelledBeforeCompletion: true); // clear any previous draft + old UpCommandRequests
+            Reset(cancelledBeforeCompletion: true);
             ApplyLocalSettings();
 
             var players = PlayerControl.AllPlayerControls.ToArray()
@@ -122,12 +124,6 @@ namespace DraftModeTOUM.Managers
             var shuffledSlots = Enumerable.Range(1, totalSlots).OrderBy(_ => UnityEngine.Random.value).ToList();
             List<byte> syncPids = new List<byte>();
             List<int> syncSlots = new List<int>();
-
-            // Broadcast a start announcement with the pick order
-            var orderMsg = new StringBuilder();
-            orderMsg.AppendLine("<color=#FFD700><b>\U0001F3B2 DRAFT STARTING!</b></color>");
-            orderMsg.AppendLine($"<color=#AAAAAA>{totalSlots} players — each gets a random pick number.</color>");
-            SendChatLocal(orderMsg.ToString());
 
             for (int i = 0; i < totalSlots; i++)
             {
@@ -145,20 +141,15 @@ namespace DraftModeTOUM.Managers
             IsDraftActive = true;
 
             DraftNetworkHelper.BroadcastDraftStart(totalSlots, syncPids, syncSlots);
-
-            // Tell each real player their slot number privately
             NotifyPlayersOfSlots();
 
-            // Show the center-screen status overlay for the host
-            DraftStatusOverlay.Show();
+            DraftStatusOverlay.SetState(OverlayState.Waiting);
 
             OfferRolesToCurrentPicker();
         }
 
         private static void NotifyPlayersOfSlots()
         {
-            // Host's panel is refreshed via RefreshTurnList (no chat message needed).
-            // Non-hosts receive the slot map so their panel can display their number too.
             DraftNetworkHelper.BroadcastSlotNotifications(_pidToSlot);
         }
 
@@ -168,9 +159,13 @@ namespace DraftModeTOUM.Managers
             CurrentTurn = 0;
             TurnTimeLeft = 0f;
             DraftUiManager.CloseAll();
-            DraftStatusOverlay.Hide();
-            // Only hide recap on manual cancel — after a completed draft it auto-hides when the game loads
-            if (cancelledBeforeCompletion) DraftRecapOverlay.Hide();
+
+            if (cancelledBeforeCompletion)
+            {
+                DraftRecapOverlay.Hide();
+                DraftStatusOverlay.SetState(OverlayState.Hidden);
+            }
+
             _slotMap.Clear();
             _pidToSlot.Clear();
             _lobbyRolePool.Clear();
@@ -180,12 +175,10 @@ namespace DraftModeTOUM.Managers
             _roleFactions.Clear();
             TurnOrder.Clear();
 
-            _impostorsDrafted       = 0;
-            _neutralKillingsDrafted  = 0;
-            _neutralPassivesDrafted  = 0;
-            // Only wipe UpCommandRequests if we're cancelling before roles were applied.
-            // If ApplyAllRoles() already ran, leave the requests intact so TOU-Mira's
-            // SelectRoles patch can read them when the game actually starts.
+            _impostorsDrafted = 0;
+            _neutralKillingsDrafted = 0;
+            _neutralPassivesDrafted = 0;
+
             if (cancelledBeforeCompletion)
             {
                 UpCommandRequests.Clear();
@@ -199,16 +192,15 @@ namespace DraftModeTOUM.Managers
             if (TurnTimeLeft <= 0f) AutoPickRandom();
         }
 
-        // Returns roles that are within counts and faction caps
         private static List<string> GetAvailableRoles()
         {
             return _lobbyRolePool.Where(r =>
             {
                 if (GetDraftedCount(r) >= GetMaxCount(r)) return false;
                 var faction = GetFaction(r);
-                if (faction == RoleFaction.Impostor       && _impostorsDrafted      >= MaxImpostors)       return false;
+                if (faction == RoleFaction.Impostor && _impostorsDrafted >= MaxImpostors) return false;
                 if (faction == RoleFaction.NeutralKilling && _neutralKillingsDrafted >= MaxNeutralKillings) return false;
-                if (faction == RoleFaction.Neutral        && _neutralPassivesDrafted  >= MaxNeutralPassives) return false;
+                if (faction == RoleFaction.Neutral && _neutralPassivesDrafted >= MaxNeutralPassives) return false;
                 return true;
             }).ToList();
         }
@@ -220,7 +212,6 @@ namespace DraftModeTOUM.Managers
             state.IsPickingNow = true;
 
             var available = GetAvailableRoles();
-
             int target = OfferedRolesCount;
 
             if (available.Count == 0)
@@ -231,7 +222,6 @@ namespace DraftModeTOUM.Managers
             {
                 var offered = new List<string>();
 
-                // Guarantee 1 impostor + 1 neutral when target >= 3
                 if (target >= 3)
                 {
                     var impPool = available.Where(r => GetFaction(r) == RoleFaction.Impostor).ToList();
@@ -244,7 +234,6 @@ namespace DraftModeTOUM.Managers
                         neutralPool.Where(r => !offered.Any(o => o.Equals(r, StringComparison.OrdinalIgnoreCase))).ToList(), 1));
                 }
 
-                // Fill remaining with crew, then anything else
                 var crewPool = available.Where(r => GetFaction(r) == RoleFaction.Crewmate
                     && !offered.Any(o => o.Equals(r, StringComparison.OrdinalIgnoreCase))).ToList();
                 offered.AddRange(PickWeightedUnique(crewPool, target - offered.Count));
@@ -269,7 +258,6 @@ namespace DraftModeTOUM.Managers
             var state = GetCurrentPickerState();
             if (state == null || state.PlayerId != playerId || state.HasPicked) return false;
 
-            // Last index (= OfferedRoles.Count) is the Random card
             string chosenRole = (choiceIndex >= state.OfferedRoles.Count)
                 ? PickFullRandom()
                 : state.OfferedRoles[choiceIndex];
@@ -281,7 +269,6 @@ namespace DraftModeTOUM.Managers
         private static void AutoPickRandom()
         {
             var state = GetCurrentPickerState();
-            // If Random option is off, pick from what was offered — not the whole pool
             if (!ShowRandomOption && state != null && state.OfferedRoles.Count > 0)
             {
                 var pick = state.OfferedRoles[UnityEngine.Random.Range(0, state.OfferedRoles.Count)];
@@ -310,66 +297,35 @@ namespace DraftModeTOUM.Managers
             state.IsPickingNow = false;
             _draftedRoleCounts[roleName] = GetDraftedCount(roleName) + 1;
 
-            // Update faction counters
             var faction = GetFaction(roleName);
-            if (faction == RoleFaction.Impostor)       _impostorsDrafted++;
+            if (faction == RoleFaction.Impostor) _impostorsDrafted++;
             else if (faction == RoleFaction.NeutralKilling) _neutralKillingsDrafted++;
-            else if (faction == RoleFaction.Neutral)        _neutralPassivesDrafted++;
-
-            DraftModePlugin.Logger.LogInfo(
-                $"[DraftManager] '{roleName}' drafted ({faction}). " +
-                $"Impostors: {_impostorsDrafted}/{MaxImpostors}, " +
-                $"NK: {_neutralKillingsDrafted}/{MaxNeutralKillings}, " +
-                $"NP: {_neutralPassivesDrafted}/{MaxNeutralPassives}");
+            else if (faction == RoleFaction.Neutral) _neutralPassivesDrafted++;
 
             CurrentTurn++;
-
-            // Refresh the turn list for anyone who has the minigame open
             DraftUiManager.RefreshTurnList();
 
             if (CurrentTurn > TurnOrder.Count)
             {
                 IsDraftActive = false;
-                ApplyAllRoles();   // populates UpCommandRequests — must happen BEFORE Reset
+                ApplyAllRoles();
                 DraftUiManager.CloseAll();
 
-                if (ShowRecap)
-                    DraftNetworkHelper.BroadcastRecap(BuildRecapMessage());
-                else
-                    DraftNetworkHelper.BroadcastRecap("<color=#FFD700><b>\u2500\u2500 DRAFT COMPLETE \u2500\u2500</b></color>");
+                // Keep the black background up during recap
+                DraftStatusOverlay.SetState(OverlayState.BackgroundOnly);
 
-                // Reset draft state but do NOT clear UpCommandRequests
-                // (TOU-Mira's SelectRoles will read them when the game starts)
+                var recapEntries = BuildRecapEntries();
+                DraftNetworkHelper.BroadcastRecap(recapEntries, ShowRecap);
+
                 Reset(cancelledBeforeCompletion: false);
 
-                TryStartGameAfterDraft();
+                TriggerEndDraftSequence();
             }
             else
             {
                 TurnTimeLeft = TurnDuration;
                 OfferRolesToCurrentPicker();
             }
-        }
-
-        private static string BuildRecapMessage()
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.AppendLine("<color=#FFD700><b>── DRAFT RECAP ──</b></color>");
-            foreach (var slot in TurnOrder)
-            {
-                var s = GetStateForSlot(slot);
-                if (s == null) continue;
-                string role = s.ChosenRole ?? "?";
-                string color = GetFaction(role) switch
-                {
-                    RoleFaction.Impostor       => "#FF4444",
-                    RoleFaction.NeutralKilling => "#FF8800",
-                    RoleFaction.Neutral        => "#AA44FF",
-                    _                          => "#4BD7E4"
-                };
-                sb.AppendLine($"Player {s.SlotNumber}: <color={color}>{role}</color>");
-            }
-            return sb.ToString();
         }
 
         public static List<RecapEntry> BuildRecapEntries()
@@ -380,64 +336,28 @@ namespace DraftModeTOUM.Managers
                 var s = GetStateForSlot(slot);
                 if (s == null) continue;
                 string role = s.ChosenRole ?? "?";
-
-                // Resolve player name
-                var player = PlayerControl.AllPlayerControls.ToArray()
-                    .FirstOrDefault(p => p.PlayerId == s.PlayerId);
-                string playerName = player?.Data?.PlayerName ?? $"Player {s.SlotNumber}";
-
-                UnityEngine.Color roleColor = GetFaction(role) switch
-                {
-                    RoleFaction.Impostor       => new UnityEngine.Color(1f,   0.27f, 0.27f),
-                    RoleFaction.NeutralKilling => new UnityEngine.Color(1f,   0.53f, 0f),
-                    RoleFaction.Neutral        => new UnityEngine.Color(0.67f,0.27f, 1f),
-                    _                          => new UnityEngine.Color(0.29f,0.84f, 0.9f)
-                };
-
-                entries.Add(new RecapEntry(playerName, role, roleColor));
+                entries.Add(new RecapEntry(s.SlotNumber, role));
             }
             return entries;
         }
 
         private static void ApplyAllRoles()
         {
-            // Register every drafted role via UpCommandRequests so TOU-Mira's
-            // SelectRoles patch honours them when the game actually starts.
-            // UpCommandRequests.TryGetRequest matches by GetRoleName() or ITownOfUsRole.LocaleKey,
-            // so we store the exact display name returned by GetRoleName().
-            // MiscUtils.AllRegisteredRoles is the same source UpCommandRequests uses for matching,
-            // so resolving against it gives us the canonical name.
             var allRoles = MiscUtils.AllRegisteredRoles.ToArray();
-
             foreach (var state in _slotMap.Values)
             {
                 if (state.PlayerId >= 200 || state.ChosenRole == null) continue;
-                var p = PlayerControl.AllPlayerControls.ToArray()
-                    .FirstOrDefault(x => x.PlayerId == state.PlayerId);
+                var p = PlayerControl.AllPlayerControls.ToArray().FirstOrDefault(x => x.PlayerId == state.PlayerId);
                 if (p == null) continue;
 
-                // Verify the role name is actually resolvable before registering.
-                // Use NiceName (the base-game property on RoleBehaviour) for matching;
-                // GetRoleName() is a MiraAPI extension that does the same thing.
                 string roleName = state.ChosenRole;
                 var match = allRoles.FirstOrDefault(r =>
                     r.NiceName.Equals(roleName, StringComparison.OrdinalIgnoreCase) ||
                     r.NiceName.Replace(" ", "").Equals(roleName.Replace(" ", ""), StringComparison.OrdinalIgnoreCase));
-                if (match != null)
-                    roleName = match.NiceName; // canonical spelling
-                else
-                    DraftModePlugin.Logger.LogWarning($"[DraftManager] Role '{roleName}' not found in AllRegisteredRoles — request may not resolve.");
+                if (match != null) roleName = match.NiceName;
 
-                DraftModePlugin.Logger.LogInfo(
-                    $"[DraftManager] Queuing role '{roleName}' for player '{p.Data.PlayerName}' (id={p.PlayerId})");
                 UpCommandRequests.SetRequest(p.Data.PlayerName, roleName);
             }
-
-            // Sanity check log
-            var all = UpCommandRequests.GetAllRequests();
-            DraftModePlugin.Logger.LogInfo($"[DraftManager] ApplyAllRoles complete — {all.Count} requests queued for SelectRoles:");
-            foreach (var kvp in all)
-                DraftModePlugin.Logger.LogInfo($"  '{kvp.Key}' => '{kvp.Value}'");
         }
 
         public static void SendChatLocal(string msg)
@@ -449,46 +369,27 @@ namespace DraftModeTOUM.Managers
         private static void ApplyLocalSettings()
         {
             var opts = MiraAPI.GameOptions.OptionGroupSingleton<DraftModeOptions>.Instance;
-
-            TurnDuration      = Mathf.Clamp(opts.TurnDurationSeconds, 5f, 60f);
-            ShowRecap         = opts.ShowRecap;
-            AutoStartAfterDraft   = opts.AutoStartAfterDraft;
+            TurnDuration = Mathf.Clamp(opts.TurnDurationSeconds, 5f, 60f);
+            ShowRecap = opts.ShowRecap;
+            AutoStartAfterDraft = opts.AutoStartAfterDraft;
             LockLobbyOnDraftStart = opts.LockLobbyOnDraftStart;
-            UseRoleChances     = opts.UseRoleChances;
-            OfferedRolesCount  = Mathf.Clamp(Mathf.RoundToInt(opts.OfferedRolesCount), 1, 9);
-            ShowRandomOption   = opts.ShowRandomOption;
-            MaxImpostors       = Mathf.Clamp(Mathf.RoundToInt(opts.MaxImpostors),       0, 10);
-            MaxNeutralKillings = Mathf.Clamp(Mathf.RoundToInt(opts.MaxNeutralKillings),  0, 10);
-            MaxNeutralPassives = Mathf.Clamp(Mathf.RoundToInt(opts.MaxNeutralPassives),  0, 10);
+            UseRoleChances = opts.UseRoleChances;
+            OfferedRolesCount = Mathf.Clamp(Mathf.RoundToInt(opts.OfferedRolesCount), 1, 9);
+            ShowRandomOption = opts.ShowRandomOption;
+            MaxImpostors = Mathf.Clamp(Mathf.RoundToInt(opts.MaxImpostors), 0, 10);
+            MaxNeutralKillings = Mathf.Clamp(Mathf.RoundToInt(opts.MaxNeutralKillings), 0, 10);
+            MaxNeutralPassives = Mathf.Clamp(Mathf.RoundToInt(opts.MaxNeutralPassives), 0, 10);
         }
 
-        private static int GetDraftedCount(string roleName)
-        {
-            return _draftedRoleCounts.TryGetValue(roleName, out var count) ? count : 0;
-        }
-
-        private static int GetMaxCount(string roleName)
-        {
-            return _roleMaxCounts.TryGetValue(roleName, out var count) ? count : 1;
-        }
-
-        private static RoleFaction GetFaction(string roleName)
-        {
-            return _roleFactions.TryGetValue(roleName, out var faction)
-                ? faction
-                : RoleCategory.GetFaction(roleName);
-        }
-
-        private static int GetWeight(string roleName)
-        {
-            return _roleWeights.TryGetValue(roleName, out var weight) ? Math.Max(1, weight) : 1;
-        }
+        private static int GetDraftedCount(string roleName) => _draftedRoleCounts.TryGetValue(roleName, out var count) ? count : 0;
+        private static int GetMaxCount(string roleName) => _roleMaxCounts.TryGetValue(roleName, out var count) ? count : 1;
+        private static RoleFaction GetFaction(string roleName) => _roleFactions.TryGetValue(roleName, out var faction) ? faction : RoleCategory.GetFaction(roleName);
+        private static int GetWeight(string roleName) => _roleWeights.TryGetValue(roleName, out var weight) ? Math.Max(1, weight) : 1;
 
         private static string PickWeighted(List<string> candidates)
         {
             int total = candidates.Sum(GetWeight);
             if (total <= 0) return candidates[UnityEngine.Random.Range(0, candidates.Count)];
-
             int roll = UnityEngine.Random.Range(1, total + 1);
             int acc = 0;
             foreach (var r in candidates)
@@ -503,36 +404,60 @@ namespace DraftModeTOUM.Managers
         {
             var results = new List<string>();
             var temp = new List<string>(candidates);
-
             while (results.Count < count && temp.Count > 0)
             {
                 var pick = UseRoleChances ? PickWeighted(temp) : temp[UnityEngine.Random.Range(0, temp.Count)];
                 results.Add(pick);
                 temp.Remove(pick);
             }
-
             return results;
         }
 
-        private static void TryStartGameAfterDraft()
+        public static void TriggerEndDraftSequence()
         {
-            if (!AutoStartAfterDraft) return;
-            if (!AmongUsClient.Instance.AmHost) return;
-            if (AmongUsClient.Instance.GameState != InnerNet.InnerNetClient.GameStates.Joined) return;
-
-            // Small delay so UpCommandRequests are registered before SelectRoles fires
-            Coroutines.Start(CoStartGame());
+            Coroutines.Start(CoEndDraftSequence());
         }
 
-        private static IEnumerator CoStartGame()
+        private static IEnumerator CoEndDraftSequence()
         {
-            // Wait long enough for the recap overlay to be visible before the scene changes
-            yield return new WaitForSeconds(ShowRecap ? 4.0f : 0.5f);
-            if (GameStartManager.Instance != null)
+            // 1. Wait for Recap Phase (5 seconds)
+            yield return new WaitForSeconds(ShowRecap ? 5.0f : 0.5f);
+
+            // 2. Hide Recap Text (but keep black screen for now)
+            try { DraftRecapOverlay.Hide(); } catch { }
+
+            bool isHost = AmongUsClient.Instance.AmHost;
+            bool shouldAutoStart = AutoStartAfterDraft && isHost;
+
+            // If NOT auto-starting, remove the black screen immediately
+            if (!AutoStartAfterDraft)
             {
-                DraftModePlugin.Logger.LogInfo("[DraftManager] Auto-starting game after draft.");
-                GameStartManager.Instance.BeginGame();
+                try { DraftStatusOverlay.SetState(OverlayState.Hidden); } catch { }
+                yield break;
             }
+
+            // 3. START GAME (Host only)
+            if (shouldAutoStart)
+            {
+                if (GameStartManager.Instance != null && AmongUsClient.Instance.GameState == InnerNet.InnerNetClient.GameStates.Joined)
+                {
+                    SkipCountdown = true;
+                    int originalMinPlayers = GameStartManager.Instance.MinPlayers;
+                    GameStartManager.Instance.MinPlayers = 1;
+                    GameStartManager.Instance.BeginGame();
+                    GameStartManager.Instance.MinPlayers = originalMinPlayers;
+                    yield return null;
+                    SkipCountdown = false;
+                }
+            }
+
+            // 4. WAIT a small buffer (0.6s) to cover the lobby flash.
+            // Since game start was triggered BEFORE this wait, the game is already loading.
+            yield return new WaitForSeconds(0.6f);
+
+            // 5. Force hide the screen. 
+            // This ensures you are never stuck, even if the transition patches fail.
+            try { DraftStatusOverlay.SetState(OverlayState.Hidden); } catch { }
         }
     }
 }
