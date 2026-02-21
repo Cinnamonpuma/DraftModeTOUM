@@ -72,7 +72,7 @@ Roles are arranged in a spinning wheel around the center of the screen. Hovering
 
 The host can configure Draft Mode from the **Mira settings menu** in the lobby. All options are synced to all players.
 
-![Draft Mode Settings](screenshots/settings.png)
+![Draft Mode Settings](screenshots/Settings.png)
 
 | Setting | Default | Description |
 |---|---|---|
