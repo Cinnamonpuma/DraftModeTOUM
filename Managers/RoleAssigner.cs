@@ -18,8 +18,7 @@ namespace DraftModeTOUM.Managers
 
             var normalized = Normalize(roleName);
 
-            DraftModePlugin.Logger.LogInfo(
-                $"[RoleAssigner] Assigning '{normalized}' → Player {player.PlayerId}");
+
 
             try
             {

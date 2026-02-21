@@ -16,24 +16,24 @@ namespace DraftModeTOUM;
 // Circle-style draft UI — roles arranged in a spinning wheel
 public sealed class DraftCircleMinigame : Minigame
 {
-    public Transform?      RolesHolder;
-    public GameObject?     RolePrefab;
-    public TextMeshPro?    StatusText;
-    public TextMeshPro?    RoleName;
+    public Transform? RolesHolder;
+    public GameObject? RolePrefab;
+    public TextMeshPro? StatusText;
+    public TextMeshPro? RoleName;
     public SpriteRenderer? RoleIcon;
-    public TextMeshPro?    RoleTeam;
-    public GameObject?     RedRing;
-    public GameObject?     WarpRing;
-    public TextMeshPro?    TurnListText;
+    public TextMeshPro? RoleTeam;
+    public GameObject? RedRing;
+    public GameObject? WarpRing;
+    public TextMeshPro? TurnListText;
 
     public static int CurrentCard { get; set; }
-    public static int RoleCount   { get; set; }
+    public static int RoleCount { get; set; }
 
     private readonly Color _bgColor = new Color32(24, 0, 0, 215);
 
     private List<DraftRoleCard>? _cards;
-    private Action<int>?         _onPick;
-    private bool                 _hasPicked;
+    private Action<int>? _onPick;
+    private bool _hasPicked;
 
     public DraftCircleMinigame(IntPtr cppPtr) : base(cppPtr) { }
 
@@ -43,17 +43,17 @@ public sealed class DraftCircleMinigame : Minigame
         if (Instance) Instance.Close();
 
         RolesHolder = transform.FindChild("Roles");
-        RolePrefab  = transform.FindChild("RoleCardHolder").gameObject;
+        RolePrefab = transform.FindChild("RoleCardHolder").gameObject;
 
         var status = transform.FindChild("Status");
         StatusText = status.gameObject.GetComponent<TextMeshPro>();
-        RoleName   = status.FindChild("RoleName").gameObject.GetComponent<TextMeshPro>();
-        RoleTeam   = status.FindChild("RoleTeam").gameObject.GetComponent<TextMeshPro>();
-        RoleIcon   = status.FindChild("RoleImage").gameObject.GetComponent<SpriteRenderer>();
-        RedRing    = status.FindChild("RoleRing").gameObject;
-        WarpRing   = status.FindChild("RingWarp").gameObject;
+        RoleName = status.FindChild("RoleName").gameObject.GetComponent<TextMeshPro>();
+        RoleTeam = status.FindChild("RoleTeam").gameObject.GetComponent<TextMeshPro>();
+        RoleIcon = status.FindChild("RoleImage").gameObject.GetComponent<SpriteRenderer>();
+        RedRing = status.FindChild("RoleRing").gameObject;
+        WarpRing = status.FindChild("RingWarp").gameObject;
 
-        var font    = HudManager.Instance.TaskPanel.taskText.font;
+        var font = HudManager.Instance.TaskPanel.taskText.font;
         var fontMat = HudManager.Instance.TaskPanel.taskText.fontMaterial;
 
         StatusText.font = font; StatusText.fontMaterial = fontMat;
@@ -61,10 +61,10 @@ public sealed class DraftCircleMinigame : Minigame
         StatusText.gameObject.SetActive(false);
 
         RoleName.font = font; RoleName.fontMaterial = fontMat;
-        RoleName.text = " ";  RoleName.gameObject.SetActive(false);
+        RoleName.text = " "; RoleName.gameObject.SetActive(false);
 
         RoleTeam.font = font; RoleTeam.fontMaterial = fontMat;
-        RoleTeam.text = " ";  RoleTeam.gameObject.SetActive(false);
+        RoleTeam.text = " "; RoleTeam.gameObject.SetActive(false);
 
         RoleIcon.sprite = TouRoleIcons.RandomAny.LoadAsset();
         RoleIcon.gameObject.SetActive(false);
@@ -76,12 +76,12 @@ public sealed class DraftCircleMinigame : Minigame
         listGo.transform.localPosition = new Vector3(-4.2f, 1.8f, -1f);
 
         TurnListText = listGo.AddComponent<TextMeshPro>();
-        TurnListText.font               = font;
-        TurnListText.fontMaterial       = fontMat;
-        TurnListText.fontSize           = 1.5f;
-        TurnListText.alignment          = TextAlignmentOptions.TopLeft;
+        TurnListText.font = font;
+        TurnListText.fontMaterial = fontMat;
+        TurnListText.fontSize = 1.5f;
+        TurnListText.alignment = TextAlignmentOptions.TopLeft;
         TurnListText.enableWordWrapping = false;
-        TurnListText.text               = "";
+        TurnListText.text = "";
         TurnListText.gameObject.SetActive(false);
 
         DraftModePlugin.Logger.LogInfo("[DraftCircleMinigame] Awake() completed.");
@@ -102,10 +102,10 @@ public sealed class DraftCircleMinigame : Minigame
     public void Open(List<DraftRoleCard> cards, Action<int> onPick)
     {
         DraftModePlugin.Logger.LogInfo($"[DraftCircleMinigame] Open() called with {cards.Count} cards.");
-        _cards      = cards;
-        _onPick     = onPick;
-        _hasPicked  = false;
-        RoleCount   = cards.Count + 1;
+        _cards = cards;
+        _onPick = onPick;
+        _hasPicked = false;
+        RoleCount = cards.Count + 1;
         CurrentCard = 0;
         Coroutines.Start(CoOpen(this));
     }
@@ -120,13 +120,35 @@ public sealed class DraftCircleMinigame : Minigame
 
     public override void Close()
     {
-        _hasPicked  = true;
+        _hasPicked = true;
+        _onPick = null;  // prevent any late callback firing
         CurrentCard = -1;
-        RoleCount   = -1;
-        // Kill the red screen overlay immediately, then hide and destroy
-        try { HudManager.Instance?.FullScreen?.gameObject?.SetActive(false); } catch { }
-        gameObject.SetActive(false);
-        UnityEngine.Object.Destroy(gameObject);
+        RoleCount = -1;
+
+        // Clear the full-screen overlay immediately
+        try
+        {
+            if (HudManager.Instance?.FullScreen != null)
+            {
+                HudManager.Instance.FullScreen.gameObject.SetActive(false);
+                HudManager.Instance.FullScreen.color = Color.clear;
+            }
+        }
+        catch { }
+
+        // Hide immediately then DestroyImmediate so there is no deferred-destroy
+        // window where the GO is still alive but _circleMinigame is already null.
+        // This was causing the circle to stay visible on the last pick.
+        try
+        {
+            gameObject.SetActive(false);
+            UnityEngine.Object.DestroyImmediate(gameObject);
+        }
+        catch
+        {
+            // Fall back to deferred destroy if DestroyImmediate throws
+            try { UnityEngine.Object.Destroy(gameObject); } catch { }
+        }
     }
 
     [HideFromIl2Cpp]
@@ -148,12 +170,12 @@ public sealed class DraftCircleMinigame : Minigame
         {
             var state = Managers.DraftManager.GetStateForSlot(slot);
             if (state == null) continue;
-            bool   isMe  = state.PlayerId == PlayerControl.LocalPlayer.PlayerId;
-            string me    = isMe ? " ◀" : "";
+            bool isMe = state.PlayerId == PlayerControl.LocalPlayer.PlayerId;
+            string me = isMe ? " ◀" : "";
             string label, color;
-            if (state.HasPicked)         { label = "(Picked)";         color = "#888888"; }
+            if (state.HasPicked) { label = "(Picked)"; color = "#888888"; }
             else if (state.IsPickingNow) { label = "<b>(Picking)</b>"; color = "#FFD700"; }
-            else                         { label = "(Waiting)";        color = "#AAAAAA"; }
+            else { label = "(Waiting)"; color = "#AAAAAA"; }
             sb.AppendLine($"<color={color}>Pick {slot}... {label}{me}</color>");
         }
         return sb.ToString();
@@ -178,7 +200,7 @@ public sealed class DraftCircleMinigame : Minigame
         {
             foreach (var card in _cards)
             {
-                var btn           = CreateCard(card.RoleName, card.TeamName, card.Icon, card.Color);
+                var btn = CreateCard(card.RoleName, card.TeamName, card.Icon, card.Color);
                 int capturedIndex = card.Index;
                 btn.OnClick.RemoveAllListeners();
                 btn.OnClick.AddListener(new Action(() =>
@@ -198,14 +220,14 @@ public sealed class DraftCircleMinigame : Minigame
 
     private PassiveButton CreateCard(string roleName, string teamName, Sprite? icon, Color color)
     {
-        var newRoleObj    = Instantiate(RolePrefab, RolesHolder);
-        var actualCard    = newRoleObj!.transform.GetChild(0);
-        var roleText      = actualCard.GetChild(0).gameObject.GetComponent<TextMeshPro>();
-        var roleImage     = actualCard.GetChild(1).gameObject.GetComponent<SpriteRenderer>();
-        var teamText      = actualCard.GetChild(2).gameObject.GetComponent<TextMeshPro>();
-        var selection     = actualCard.GetChild(3).gameObject;
+        var newRoleObj = Instantiate(RolePrefab, RolesHolder);
+        var actualCard = newRoleObj!.transform.GetChild(0);
+        var roleText = actualCard.GetChild(0).gameObject.GetComponent<TextMeshPro>();
+        var roleImage = actualCard.GetChild(1).gameObject.GetComponent<SpriteRenderer>();
+        var teamText = actualCard.GetChild(2).gameObject.GetComponent<TextMeshPro>();
+        var selection = actualCard.GetChild(3).gameObject;
         var passiveButton = actualCard.GetComponent<PassiveButton>();
-        var rollover      = actualCard.GetComponent<ButtonRolloverHandler>();
+        var rollover = actualCard.GetComponent<ButtonRolloverHandler>();
 
         selection.SetActive(false);
 
@@ -220,20 +242,20 @@ public sealed class DraftCircleMinigame : Minigame
         passiveButton.OnMouseOut.AddListener(new Action(() => selection.SetActive(false)));
 
         float angle = (2 * Mathf.PI / RoleCount) * CurrentCard;
-        float x     = 1.9f * Mathf.Cos(angle);
-        float y     = 0.1f + 1.9f * Mathf.Sin(angle);
+        float x = 1.9f * Mathf.Cos(angle);
+        float y = 0.1f + 1.9f * Mathf.Sin(angle);
 
         newRoleObj.transform.localPosition = new Vector3(x, y, -1f);
         newRoleObj.name = roleName + " DraftSelection";
 
-        roleText.text    = roleName;
-        teamText.text    = teamName;
+        roleText.text = roleName;
+        teamText.text = teamName;
         roleImage.sprite = icon ?? TouRoleIcons.RandomAny.LoadAsset();
         roleImage.transform.localScale = Vector3.one * 0.4f;
 
         rollover.OverColor = color;
-        roleText.color     = color;
-        teamText.color     = color;
+        roleText.color = color;
+        teamText.color = color;
 
         CurrentCard++;
         newRoleObj.gameObject.SetActive(true);
@@ -252,17 +274,17 @@ public sealed class DraftCircleMinigame : Minigame
             yield return new WaitForSeconds(0.01f);
         }
         CurrentCard = -1;
-        RoleCount   = -1;
+        RoleCount = -1;
     }
 
     private static IEnumerator CoPopIn(Transform t)
     {
         float targetScale = 0.5f;
-        float duration    = 0.12f;
-        t.localScale      = Vector3.zero;
+        float duration = 0.12f;
+        t.localScale = Vector3.zero;
         for (float timer = 0f; timer < duration; timer += Time.deltaTime)
         {
-            float scale  = Mathf.LerpUnclamped(0f, targetScale, EaseOutBack(timer / duration));
+            float scale = Mathf.LerpUnclamped(0f, targetScale, EaseOutBack(timer / duration));
             t.localScale = Vector3.one * scale;
             yield return null;
         }
