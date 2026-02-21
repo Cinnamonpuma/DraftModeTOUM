@@ -2,7 +2,6 @@ using DraftModeTOUM.Managers;
 using HarmonyLib;
 using InnerNet;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -31,8 +30,9 @@ namespace DraftModeTOUM.Patches
         // If they still fail verification, ModInfoPostfix kicks them again and re-adds them here.
         private static readonly HashSet<string> _modKickedPlayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Tracks pending fallback coroutine host objects: clientId -> GameObject
-        private static readonly Dictionary<int, GameObject> _pendingFallbacks = new Dictionary<int, GameObject>();
+        // Pending fallback kicks: clientId -> (playerName, timeOfJoin)
+        private static readonly Dictionary<int, (string playerName, float deadline)> _pendingFallbacks
+            = new Dictionary<int, (string, float)>();
 
         public static void Apply(Harmony harmony)
         {
@@ -106,84 +106,68 @@ namespace DraftModeTOUM.Patches
                 return;
             }
 
-            // Schedule a fallback verification kick in case ReceiveClientModInfo never fires
-            // (e.g. Reactor crashes on an unknown mod key like Submerged before reaching it).
+            // Register a fallback deadline. FallbackTick (called from Update) will
+            // kick this player if ModInfoPostfix hasn't verified them in time.
             if (RequireDraftMod)
             {
-                ScheduleFallbackKick(data.Id, playerName);
+                _pendingFallbacks[data.Id] = (playerName, Time.realtimeSinceStartup + FALLBACK_KICK_DELAY);
+                DraftModePlugin.Logger.LogInfo(
+                    $"[RequireModPatch] Registered fallback kick for {playerName} (clientId={data.Id}) in {FALLBACK_KICK_DELAY}s.");
             }
         }
 
         /// <summary>
-        /// Schedules a coroutine that kicks the player if they haven't been verified
-        /// within FALLBACK_KICK_DELAY seconds. This covers cases where Reactor's
-        /// HandleRpc crashes before ReceiveClientModInfo fires (e.g. Submerged key miss).
+        /// Called every frame from FallbackTickPatch. Checks if any pending fallback
+        /// deadlines have passed and kicks unverified players.
         /// </summary>
-        private static void ScheduleFallbackKick(int clientId, string playerName)
+        public static void FallbackTick()
         {
-            // Cancel any existing pending fallback for this client (e.g. rapid rejoin)
-            CancelFallbackKick(clientId);
-
-            var go = new GameObject($"DraftModFallbackKick_{clientId}");
-            UnityEngine.Object.DontDestroyOnLoad(go);
-            var runner = go.AddComponent<CoroutineRunner>();
-            runner.Run(FallbackKickCoroutine(clientId, playerName, go));
-            _pendingFallbacks[clientId] = go;
-
-            DraftModePlugin.Logger.LogInfo(
-                $"[RequireModPatch] Scheduled fallback kick for {playerName} (clientId={clientId}) in {FALLBACK_KICK_DELAY}s.");
-        }
-
-        private static void CancelFallbackKick(int clientId)
-        {
-            if (_pendingFallbacks.TryGetValue(clientId, out var go))
-            {
-                if (go != null)
-                    UnityEngine.Object.Destroy(go);
-                _pendingFallbacks.Remove(clientId);
-            }
-        }
-
-        private static IEnumerator FallbackKickCoroutine(int clientId, string playerName, GameObject self)
-        {
-            yield return new WaitForSeconds(FALLBACK_KICK_DELAY);
-
-            _pendingFallbacks.Remove(clientId);
-
+            if (_pendingFallbacks.Count == 0) return;
             if (!AmongUsClient.Instance.AmHost || !RequireDraftMod)
             {
-                UnityEngine.Object.Destroy(self);
-                yield break;
+                _pendingFallbacks.Clear();
+                return;
             }
 
-            // If already verified, no action needed
-            if (_verifiedClients.Contains(clientId))
+            float now = Time.realtimeSinceStartup;
+            var expired = new List<int>();
+
+            foreach (var kvp in _pendingFallbacks)
             {
-                DraftModePlugin.Logger.LogInfo(
-                    $"[RequireModPatch] Fallback: {playerName} (clientId={clientId}) already verified — no kick.");
-                UnityEngine.Object.Destroy(self);
-                yield break;
+                if (now >= kvp.Value.deadline)
+                    expired.Add(kvp.Key);
             }
 
-            // Check if the player is still in the lobby
-            var client = AmongUsClient.Instance.GetClient(clientId);
-            if (client == null)
+            foreach (int clientId in expired)
             {
-                DraftModePlugin.Logger.LogInfo(
-                    $"[RequireModPatch] Fallback: {playerName} (clientId={clientId}) already left — no kick.");
-                UnityEngine.Object.Destroy(self);
-                yield break;
+                var (playerName, _) = _pendingFallbacks[clientId];
+                _pendingFallbacks.Remove(clientId);
+
+                // Already verified — no action needed
+                if (_verifiedClients.Contains(clientId))
+                {
+                    DraftModePlugin.Logger.LogInfo(
+                        $"[RequireModPatch] Fallback: {playerName} (clientId={clientId}) already verified — no kick.");
+                    continue;
+                }
+
+                // Check if the player is still in the lobby
+                var client = AmongUsClient.Instance.GetClient(clientId);
+                if (client == null)
+                {
+                    DraftModePlugin.Logger.LogInfo(
+                        $"[RequireModPatch] Fallback: {playerName} (clientId={clientId}) already left — no kick.");
+                    continue;
+                }
+
+                // Still here and unverified — kick them
+                DraftModePlugin.Logger.LogWarning(
+                    $"[RequireModPatch] Fallback kick: {playerName} (clientId={clientId}) never verified. Kicking.");
+                DraftManager.SendChatLocal(
+                    $"<color=#FF4444>{playerName} was kicked — could not verify <b>{MOD_NAME}</b> v{PluginInfo.PLUGIN_VERSION}. Please ensure you have the mod installed.</color>");
+                _modKickedPlayers.Add(playerName);
+                AmongUsClient.Instance.KickPlayer(clientId, false);
             }
-
-            // Player is still here and unverified — kick them
-            DraftModePlugin.Logger.LogWarning(
-                $"[RequireModPatch] Fallback kick: {playerName} (clientId={clientId}) never verified by ModInfoPostfix. Kicking.");
-            DraftManager.SendChatLocal(
-                $"<color=#FF4444>{playerName} was kicked — could not verify <b>{MOD_NAME}</b> v{PluginInfo.PLUGIN_VERSION}. Please ensure you have the mod installed.</color>");
-            _modKickedPlayers.Add(playerName);
-            AmongUsClient.Instance.KickPlayer(clientId, false);
-
-            UnityEngine.Object.Destroy(self);
         }
 
         public static void ModInfoPostfix(PlayerControl client, Dictionary<byte, string> list)
@@ -199,8 +183,7 @@ namespace DraftModeTOUM.Patches
 
             if (_verifiedClients.Contains(playerInfo.ClientId))
             {
-                // Already verified — cancel any pending fallback just in case
-                CancelFallbackKick(playerInfo.ClientId);
+                _pendingFallbacks.Remove(playerInfo.ClientId);
                 return;
             }
 
@@ -213,8 +196,7 @@ namespace DraftModeTOUM.Patches
             if (hasCorrectVersion)
             {
                 _verifiedClients.Add(playerInfo.ClientId);
-                CancelFallbackKick(playerInfo.ClientId);
-                // They now have the mod — clear from mod-kicked list so future rejoins work
+                _pendingFallbacks.Remove(playerInfo.ClientId);
                 _modKickedPlayers.Remove(playerName);
                 DraftModePlugin.Logger.LogInfo(
                     $"[RequireModPatch] {playerName} verified with {RequiredEntry}.");
@@ -228,7 +210,7 @@ namespace DraftModeTOUM.Patches
             DraftManager.SendChatLocal(
                 $"<color=#FF4444>{playerName} was kicked — {reason}.</color>");
 
-            CancelFallbackKick(playerInfo.ClientId);
+            _pendingFallbacks.Remove(playerInfo.ClientId);
             _modKickedPlayers.Add(playerName);
             AmongUsClient.Instance.KickPlayer(playerInfo.ClientId, false);
 
@@ -238,25 +220,10 @@ namespace DraftModeTOUM.Patches
 
         public static void ClearSession()
         {
-            // Cancel all pending fallback coroutines
-            foreach (var go in _pendingFallbacks.Values)
-            {
-                if (go != null)
-                    UnityEngine.Object.Destroy(go);
-            }
             _pendingFallbacks.Clear();
-
             _verifiedClients.Clear();
             _draftKickedPlayers.Clear();
             _modKickedPlayers.Clear();
         }
-    }
-
-    /// <summary>
-    /// Minimal MonoBehaviour used solely to run coroutines on a temp GameObject.
-    /// </summary>
-    internal class CoroutineRunner : MonoBehaviour
-    {
-        public void Run(IEnumerator coroutine) => StartCoroutine(coroutine);
     }
 }

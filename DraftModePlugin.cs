@@ -35,8 +35,7 @@ namespace DraftModeTOUM
                 ClassInjector.RegisterTypeInIl2Cpp<DraftScreenController>();
                 ClassInjector.RegisterTypeInIl2Cpp<DraftCircleMinigame>();
                 ClassInjector.RegisterTypeInIl2Cpp<DraftStatusOverlay>();
-                ClassInjector.RegisterTypeInIl2Cpp<CoroutineRunner>();
-                Logger.LogInfo("DraftTicker + DraftScreenController + DraftCircleMinigame + DraftStatusOverlay + CoroutineRunner registered.");
+                Logger.LogInfo("DraftTicker + DraftScreenController + DraftCircleMinigame + DraftStatusOverlay registered.");
             }
             catch (System.Exception ex)
             {
@@ -99,6 +98,20 @@ namespace DraftModeTOUM
         {
             DraftScreenController.Hide();
             DraftStatusOverlay.Hide();
+        }
+    }
+
+    /// <summary>
+    /// Drives RequireModPatch.FallbackTick() from the lobby update loop.
+    /// This replaces the coroutine approach to avoid IL2CPP IEnumerator issues.
+    /// </summary>
+    [HarmonyPatch(typeof(LobbyBehaviour), nameof(LobbyBehaviour.Update))]
+    public static class FallbackTickPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix()
+        {
+            RequireModPatch.FallbackTick();
         }
     }
 }
