@@ -16,17 +16,19 @@ namespace DraftModeTOUM.Patches
         private static string RequiredEntry =>
             $"{MOD_NAME}: {PluginInfo.PLUGIN_VERSION}";
 
-
         private static readonly HashSet<int> _verifiedClients = new HashSet<int>();
 
+        // Kicked for joining mid-draft — re-kick immediately on rejoin, no second chance
+        private static readonly HashSet<string> _draftKickedPlayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        private static readonly HashSet<int> _kickedClients = new HashSet<int>();
+        // Kicked for missing/wrong mod — do NOT re-kick on join, let ModInfoPostfix verify first.
+        // If they still fail verification, ModInfoPostfix kicks them again and re-adds them here.
+        private static readonly HashSet<string> _modKickedPlayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         public static void Apply(Harmony harmony)
         {
             try
             {
-
                 var modInfoTarget = AccessTools.Method(
                     "TownOfUs.Networking.SendClientModInfoRpc:ReceiveClientModInfo");
 
@@ -42,7 +44,6 @@ namespace DraftModeTOUM.Patches
                     DraftModePlugin.Logger.LogInfo(
                         $"[RequireModPatch] Patched ReceiveClientModInfo. Requiring: {RequiredEntry}");
                 }
-
 
                 var joinTarget = AccessTools.Method(
                     typeof(AmongUsClient), nameof(AmongUsClient.OnPlayerJoined));
@@ -65,38 +66,38 @@ namespace DraftModeTOUM.Patches
             }
         }
 
-
         public static void OnPlayerJoinedPostfix(ClientData data)
         {
             if (!AmongUsClient.Instance.AmHost) return;
             if (data.Id == AmongUsClient.Instance.ClientId) return;
 
-            if (DraftManager.IsDraftActive && DraftManager.LockLobbyOnDraftStart)
+            string playerName = data.PlayerName ?? string.Empty;
+
+            // Only immediately re-kick players who joined during an active draft —
+            // mod-kicked players are allowed back in to give ModInfoPostfix a chance
+            // to verify they now have the correct mod installed.
+            if (_draftKickedPlayers.Contains(playerName))
             {
                 DraftModePlugin.Logger.LogInfo(
-                    $"[RequireModPatch] Draft active — kicking client {data.Id} ({data.PlayerName}).");
-
+                    $"[RequireModPatch] Draft-kicked player '{playerName}' rejoined — kicking again.");
                 DraftManager.SendChatLocal(
-                    $"<color=#FF4444>{data.PlayerName} was kicked — draft has already started.</color>");
-
-                _kickedClients.Add(data.Id);
+                    $"<color=#FF4444>{playerName} was kicked — draft has already started.</color>");
                 AmongUsClient.Instance.KickPlayer(data.Id, false);
                 return;
             }
 
-            if (!RequireDraftMod) return;
-
-
-            if (_kickedClients.Contains(data.Id))
+            if (DraftManager.IsDraftActive && DraftManager.LockLobbyOnDraftStart)
             {
                 DraftModePlugin.Logger.LogInfo(
-                    $"[RequireModPatch] Previously kicked client {data.Id} ({data.PlayerName}) rejoined — kicking again.");
-
+                    $"[RequireModPatch] Draft active — kicking client {data.Id} ({playerName}).");
                 DraftManager.SendChatLocal(
-                    $"<color=#FF4444>{data.PlayerName} was kicked — {MOD_NAME} v{PluginInfo.PLUGIN_VERSION} required.</color>");
-
+                    $"<color=#FF4444>{playerName} was kicked — draft has already started.</color>");
+                _draftKickedPlayers.Add(playerName);
                 AmongUsClient.Instance.KickPlayer(data.Id, false);
             }
+
+            // Note: mod-kicked players are allowed to proceed here so ModInfoPostfix
+            // can verify them. If they still lack the mod, ModInfoPostfix kicks them again.
         }
 
         public static void ModInfoPostfix(PlayerControl client, Dictionary<byte, string> list)
@@ -108,7 +109,8 @@ namespace DraftModeTOUM.Patches
             var playerInfo = GameData.Instance.GetPlayerById(client.PlayerId);
             if (playerInfo == null) return;
 
- 
+            string playerName = client.Data.PlayerName ?? string.Empty;
+
             if (_verifiedClients.Contains(playerInfo.ClientId)) return;
 
             bool hasMod = list.Values.Any(v =>
@@ -119,10 +121,11 @@ namespace DraftModeTOUM.Patches
 
             if (hasCorrectVersion)
             {
-
                 _verifiedClients.Add(playerInfo.ClientId);
+                // They now have the mod — clear from mod-kicked list so future rejoins work
+                _modKickedPlayers.Remove(playerName);
                 DraftModePlugin.Logger.LogInfo(
-                    $"[RequireModPatch] {client.Data.PlayerName} verified with {RequiredEntry}.");
+                    $"[RequireModPatch] {playerName} verified with {RequiredEntry}.");
                 return;
             }
 
@@ -131,22 +134,20 @@ namespace DraftModeTOUM.Patches
                 : $"missing <b>{MOD_NAME}</b> v{PluginInfo.PLUGIN_VERSION}";
 
             DraftManager.SendChatLocal(
-                $"<color=#FF4444>{client.Data.PlayerName} was kicked — {reason}.</color>");
+                $"<color=#FF4444>{playerName} was kicked — {reason}.</color>");
 
-
-            _kickedClients.Add(playerInfo.ClientId);
-
+            _modKickedPlayers.Add(playerName);
             AmongUsClient.Instance.KickPlayer(playerInfo.ClientId, false);
 
             DraftModePlugin.Logger.LogInfo(
-                $"[RequireModPatch] Kicked {client.Data.PlayerName} ({playerInfo.ClientId}) — {reason}.");
+                $"[RequireModPatch] Kicked {playerName} ({playerInfo.ClientId}) — {reason}.");
         }
-
 
         public static void ClearSession()
         {
             _verifiedClients.Clear();
-            _kickedClients.Clear();
+            _draftKickedPlayers.Clear();
+            _modKickedPlayers.Clear();
         }
     }
 }

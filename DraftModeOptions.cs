@@ -30,6 +30,9 @@ public sealed class DraftModeOptions : AbstractOptionGroup
     [ModdedToggleOption("Show Random Option")]
     public bool ShowRandomOption { get; set; } = true;
 
+    [ModdedToggleOption("Show Background Overlay")]
+    public bool ShowBackground { get; set; } = true;
+
     [ModdedNumberOption("Offered Roles Per Turn", 1f, 9f, 1f, MiraNumberSuffixes.None, "0")]
     public float OfferedRolesCount { get; set; } = 3f;
 
