@@ -106,7 +106,7 @@ namespace DraftModeTOUM.Managers
         private static readonly HashSet<string> _bannedRoles =
             new(StringComparer.OrdinalIgnoreCase)
             {
-                "Haunter", "Spectre", "Teleporter", "Pestilence", "Traitor", "Mayor"
+                "Haunter", "Spectre", "Teleporter", "Pestilence", "Traitor", "Mayor", "Spectator", "CrewmateGhost", "ImpostorGhost", "GuardianAngel"
             };
 
         public static bool IsBannedRole(string niceName) => _bannedRoles.Contains(niceName);

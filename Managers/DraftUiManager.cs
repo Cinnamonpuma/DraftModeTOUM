@@ -12,9 +12,15 @@ using UnityEngine;
 
 namespace DraftModeTOUM.Managers
 {
+    /// <summary>
+    /// Manages the lifetime of every draft-related UI panel so they can all
+    /// be closed in one call (e.g. on disconnect or game-start).
+    /// Also exposes helpers used by DraftRpcPatch and DraftSelectionMinigame.
+    /// </summary>
     public static class DraftUiManager
     {
         private static DraftCircleMinigame? _circleMinigame;
+        private static List<ushort>         _lastOfferedRoleIds = new();
 
         private static bool UseCircle
         {
@@ -46,9 +52,15 @@ namespace DraftModeTOUM.Managers
 
         public static void RefreshTurnList()
         {
-            if (UseCircle && _circleMinigame != null &&
-                _circleMinigame.gameObject != null && _circleMinigame.gameObject.activeSelf)
-                _circleMinigame.RefreshTurnList();
+            DraftStatusOverlay.Refresh();
+
+            if (UseCircle && _circleMinigame != null)
+            {
+                bool alive = false;
+                try { alive = _circleMinigame.gameObject != null && _circleMinigame.gameObject.activeSelf; } catch { }
+                if (alive)
+                    _circleMinigame.RefreshTurnList();
+            }
         }
 
         public static void CloseAll()
@@ -93,6 +105,10 @@ namespace DraftModeTOUM.Managers
                 ushort id   = roleIds[i];
                 var    role = ResolveRole(id);
 
+                string displayName = role?.NiceName ?? $"Role {id}";
+                string team = GetTeamLabel(role) ?? "Unknown";
+                Sprite icon = GetRoleIcon(role);
+                Color color = GetRoleColor(role);
                 // Everything resolved locally — host rename has zero effect
                 string displayName = role?.NiceName          ?? $"Role {id}";
                 string team        = GetTeamLabel(role)       ?? "Unknown";
@@ -114,7 +130,6 @@ namespace DraftModeTOUM.Managers
 
         // ── Role resolution ──────────────────────────────────────────────────────
 
-        /// <summary>Resolve a RoleBehaviour from a RoleTypes ushort ID.</summary>
         public static RoleBehaviour? ResolveRole(ushort roleId)
         {
             try { return RoleManager.Instance?.GetRole((RoleTypes)roleId); }
@@ -155,6 +170,7 @@ namespace DraftModeTOUM.Managers
 
         private static void ShowCircle(List<ushort> roleIds)
         {
+            _lastOfferedRoleIds = roleIds;
             EnsureCircleMinigame();
             if (_circleMinigame == null) return;
             var cards = BuildCards(roleIds);
@@ -175,10 +191,19 @@ namespace DraftModeTOUM.Managers
 
         private static void OnPickSelected(int index)
         {
+            ushort? pickedId = (index < _lastOfferedRoleIds.Count) ? _lastOfferedRoleIds[index] : (ushort?)null;
+            DraftModePlugin.Logger.LogInfo($"[DraftUiManager] OnPickSelected index={index} roleId={pickedId}");
+            if (pickedId.HasValue)
+                DraftStatusOverlay.NotifyLocalPlayerPicked(pickedId.Value);
             var circle = _circleMinigame;
             _circleMinigame = null;
             try { circle?.Close(); } catch { }
             DraftNetworkHelper.SendPickToHost(index);
         }
+
+        // ── Utility ───────────────────────────────────────────────────────────────
+
+        public static string Normalize(string s) =>
+            (s ?? string.Empty).Replace(" ", "").Replace("-", "");
     }
 }
