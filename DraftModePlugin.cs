@@ -20,8 +20,8 @@ namespace DraftModeTOUM
     [ReactorModFlags(ModFlags.RequireOnAllClients)]
     public class DraftModePlugin : BasePlugin, IMiraPlugin
     {
-        public static ManualLogSource Logger = null!;
-        private Harmony _harmony = null!;
+        public static ManualLogSource Logger;
+        private Harmony _harmony;
 
         public string OptionsTitleText => "Draft Mode";
 
