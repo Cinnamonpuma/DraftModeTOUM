@@ -20,7 +20,6 @@ namespace DraftModeTOUM.Managers
         public ushort?      ChosenRoleId   { get; set; }
         public bool         HasPicked      { get; set; }
         public bool         IsPickingNow   { get; set; }
-        public bool         IsDisconnected { get; set; }
         public List<ushort> OfferedRoleIds { get; set; } = new();
 
         /// <summary>
@@ -65,26 +64,23 @@ namespace DraftModeTOUM.Managers
         private static readonly HashSet<byte>              _appliedPlayers        = new();
 
         // ---- Forced draft card --------------------------------------------------
-        private static string  _forcedRoleName     = null;
-        private static ushort? _forcedRoleId       = null;
-        private static byte    _forcedRoleTargetId  = 255;
+        // Admin pins a role via the web dashboard. On the player's next turn it is
+        // injected as a guaranteed card and auto-confirmed so they receive it.
+        // Only the HOST stores and acts on this — non-hosts relay via ForceRole RPC.
+        private static string  _forcedRoleName    = null;
+        private static ushort? _forcedRoleId      = null;
+        private static byte    _forcedRoleTargetId = 255; // 255 = unset
 
-        // ---- Coroutine tracking -------------------------------------------------
-        // Track running end-sequence coroutine so we can cancel it on reset
-        private static bool _endSequenceRunning = false;
-
+        /// <summary>
+        /// Called on the host (directly or via RPC relay) to pin a forced role
+        /// for a specific player. targetPlayerId is the Among Us player ID.
+        /// </summary>
         public static void SetForcedDraftRole(string roleName, byte targetPlayerId)
         {
             _forcedRoleName     = roleName;
             _forcedRoleId       = null;
             _forcedRoleTargetId = targetPlayerId;
-            LoggingSystem.Debug($"[DraftManager] Forced draft card set: '{roleName}' for player {targetPlayerId}");
-            
-            // If draft is already active, resolve the role ID immediately
-            if (IsDraftActive)
-            {
-                ResolveForcedRoleId();
-            }
+            DraftModePlugin.Logger.LogInfo($"[DraftManager] Forced draft card set: '{roleName}' for player {targetPlayerId}");
         }
 
         // ---- Public accessors ---------------------------------------------------
@@ -93,11 +89,6 @@ namespace DraftModeTOUM.Managers
             _pidToSlot.TryGetValue(playerId, out int slot) ? slot : -1;
         public static PlayerDraftState GetStateForSlot(int slot) =>
             _slotMap.TryGetValue(slot, out var s) ? s : null;
-        public static PlayerDraftState GetStateForPlayer(byte playerId)
-        {
-            int slot = GetSlotForPlayer(playerId);
-            return slot >= 0 ? GetStateForSlot(slot) : null;
-        }
 
         public static PlayerDraftState GetCurrentPickerState()
         {
@@ -148,20 +139,20 @@ namespace DraftModeTOUM.Managers
 
             DraftTicker.EnsureExists();
 
+            // Preserve any pending forced role across Reset()
             string  savedForcedName   = _forcedRoleName;
             byte    savedForcedTarget = _forcedRoleTargetId;
 
             Reset(cancelledBeforeCompletion: true);
             ApplyLocalSettings();
 
+            // Restore the forced role if one was pending
             if (!string.IsNullOrWhiteSpace(savedForcedName) && savedForcedTarget != 255)
             {
                 _forcedRoleName     = savedForcedName;
                 _forcedRoleTargetId = savedForcedTarget;
-                _forcedRoleId       = null;
-                DraftModePlugin.Logger.LogInfo(
                 _forcedRoleId       = null; // will be resolved after pool is built
-                LoggingSystem.Debug(
+                DraftModePlugin.Logger.LogInfo(
                     $"[DraftManager] Restored pending forced role '{savedForcedName}' " +
                     $"for player {savedForcedTarget} after Reset");
             }
@@ -194,7 +185,7 @@ namespace DraftModeTOUM.Managers
             IsDraftActive = true;
 
             AssignFactionBuckets();
-            ResolveForcedRoleId();
+            ResolveForcedRoleId(); // resolve name → ID now that pool is built
 
             DraftNetworkHelper.BroadcastDraftStart(totalSlots, syncPids, syncSlots);
             DraftNetworkHelper.BroadcastSlotNotifications(_pidToSlot);
@@ -205,42 +196,48 @@ namespace DraftModeTOUM.Managers
 
         // ---- Forced role resolution ---------------------------------------------
 
+        /// <summary>
+        /// Resolves _forcedRoleName to a role ID. Searches the pool first,
+        /// then all RoleTypes. Must be called after _pool is built.
+        /// </summary>
         private static void ResolveForcedRoleId()
         {
             if (string.IsNullOrWhiteSpace(_forcedRoleName)) return;
             _forcedRoleId = null;
 
-            LoggingSystem.Debug(
+            DraftModePlugin.Logger.LogInfo(
                 $"[DraftManager] Resolving forced role '{_forcedRoleName}' " +
                 $"for player {_forcedRoleTargetId} (pool has {_pool.RoleIds.Count} roles)");
 
+            // Search pool first
             foreach (var id in _pool.RoleIds)
             {
                 var role = RoleManager.Instance?.GetRole((RoleTypes)id);
                 if (role == null) continue;
-                LoggingSystem.Debug($"[DraftManager]   pool role: '{role.NiceName}' (id={id})");
+                DraftModePlugin.Logger.LogInfo($"[DraftManager]   pool role: '{role.NiceName}' (id={id})");
                 if (string.Equals(role.NiceName, _forcedRoleName, StringComparison.OrdinalIgnoreCase))
                 {
                     _forcedRoleId = id;
-                    LoggingSystem.Debug(
+                    DraftModePlugin.Logger.LogInfo(
                         $"[DraftManager] Forced role resolved in pool: '{_forcedRoleName}' -> {id}");
                     return;
                 }
             }
 
+            // Fall back to all registered roles (bypasses pool — still force-assigns it)
             foreach (RoleTypes rt in System.Enum.GetValues(typeof(RoleTypes)))
             {
                 var role = RoleManager.Instance?.GetRole(rt);
                 if (role != null && string.Equals(role.NiceName, _forcedRoleName, StringComparison.OrdinalIgnoreCase))
                 {
                     _forcedRoleId = (ushort)rt;
-                    LoggingSystem.Debug(
+                    DraftModePlugin.Logger.LogInfo(
                         $"[DraftManager] Forced role resolved (outside pool): '{_forcedRoleName}' -> {rt}");
                     return;
                 }
             }
 
-            LoggingSystem.Warning(
+            DraftModePlugin.Logger.LogWarning(
                 $"[DraftManager] Could not resolve forced role name: '{_forcedRoleName}'");
         }
 
@@ -277,70 +274,15 @@ namespace DraftModeTOUM.Managers
             for (int i = 0; i < npSlots;  i++) buckets.Add(RoleFaction.Neutral);
             while (buckets.Count < playerCount) buckets.Add(null);
 
-            // Spread non-crew slots evenly across early/mid/late positions rather
-            // than pure random shuffle, which tends to cluster them at the front.
-            // Divide the turn order into thirds and ensure each third gets a
-            // proportional share of non-crew guaranteed slots.
-            int nonCrew = impSlots + nkSlots + npSlots;
-            if (nonCrew > 0 && playerCount >= 3)
+            buckets = buckets.OrderBy(_ => UnityEngine.Random.value).ToList();
+
+            for (int i = 0; i < TurnOrder.Count; i++)
             {
-                var nonCrewBuckets = buckets.Where(b => b.HasValue)
-                                            .OrderBy(_ => UnityEngine.Random.value)
-                                            .ToList();
-                var crewBuckets    = buckets.Where(b => !b.HasValue).ToList();
-
-                // Split positions into thirds, assign one non-crew to each third
-                // before randomly filling the rest
-                var positions = Enumerable.Range(0, playerCount)
-                                          .OrderBy(_ => UnityEngine.Random.value)
-                                          .ToList();
-
-                int third = playerCount / 3;
-                var earlyPos = positions.Take(third).OrderBy(_ => UnityEngine.Random.value).ToList();
-                var midPos   = positions.Skip(third).Take(third).OrderBy(_ => UnityEngine.Random.value).ToList();
-                var latePos  = positions.Skip(third * 2).OrderBy(_ => UnityEngine.Random.value).ToList();
-
-                var assignedBuckets = new RoleFaction?[playerCount];
-
-                // Distribute non-crew as evenly as possible across thirds
-                int perThird = nonCrew / 3;
-                int extra    = nonCrew % 3;
-
-                var thirds = new List<List<int>> { earlyPos, midPos, latePos };
-                int bucketIdx = 0;
-                for (int t = 0; t < 3 && bucketIdx < nonCrewBuckets.Count; t++)
-                {
-                    int count = perThird + (t < extra ? 1 : 0);
-                    foreach (var pos in thirds[t].Take(count))
-                    {
-                        if (bucketIdx >= nonCrewBuckets.Count) break;
-                        assignedBuckets[pos] = nonCrewBuckets[bucketIdx++];
-                    }
-                }
-
-                // Fill remaining positions with crew (null)
-                for (int i = 0; i < playerCount; i++)
-                    if (!assignedBuckets[i].HasValue && bucketIdx >= nonCrewBuckets.Count)
-                        assignedBuckets[i] = null;
-
-                for (int i = 0; i < TurnOrder.Count; i++)
-                {
-                    var state = GetStateForSlot(TurnOrder[i]);
-                    if (state != null) state.GuaranteedFaction = assignedBuckets[i];
-                }
-            }
-            else
-            {
-                // Fallback: pure shuffle (small player counts or no non-crew)
-                buckets = buckets.OrderBy(_ => UnityEngine.Random.value).ToList();
-                for (int i = 0; i < TurnOrder.Count; i++)
-                {
-                    var state = GetStateForSlot(TurnOrder[i]);
-                    if (state != null) state.GuaranteedFaction = buckets[i];
-                }
+                var state = GetStateForSlot(TurnOrder[i]);
+                if (state != null) state.GuaranteedFaction = buckets[i];
             }
 
-            LoggingSystem.Debug(
+            DraftModePlugin.Logger.LogInfo(
                 $"[DraftManager] Buckets assigned: {impSlots} Imp, {nkSlots} NK, " +
                 $"{npSlots} NP, {playerCount - impSlots - nkSlots - npSlots} Crew");
         }
@@ -350,10 +292,7 @@ namespace DraftModeTOUM.Managers
         public static void Reset(bool cancelledBeforeCompletion = true)
         {
             IsDraftActive    = false;
-            // FIX: TurnTimerRunning was never reset — this caused the ticker to keep
-            // firing AutoPickRandom() on the next draft (or after disconnect).
             TurnTimerRunning = false;
-            _endSequenceRunning = false;
             CurrentTurn      = 0;
             TurnTimeLeft     = 0f;
             DraftUiManager.CloseAll();
@@ -396,15 +335,9 @@ namespace DraftModeTOUM.Managers
 
         public static void Tick(float deltaTime)
         {
-            // FIX: Added IsDraftActive guard so stale ticks after disconnect
-            // don't call AutoPickRandom and corrupt state.
             if (!IsDraftActive || !AmongUsClient.Instance.AmHost || !TurnTimerRunning) return;
             TurnTimeLeft -= deltaTime;
-            if (TurnTimeLeft <= 0f)
-            {
-                TurnTimerRunning = false; // FIX: stop timer before auto-pick to prevent double-fire
-                AutoPickRandom();
-            }
+            if (TurnTimeLeft <= 0f) AutoPickRandom();
         }
 
         // ---- Role offering ------------------------------------------------------
@@ -429,31 +362,17 @@ namespace DraftModeTOUM.Managers
 
         private static void OfferRolesToCurrentPicker()
         {
-            // FIX: Guard against calling this when draft is no longer active
-            if (!IsDraftActive) return;
-
             var state = GetCurrentPickerState();
             if (state == null) return;
-
-            // Skip disconnected players immediately — auto-pick random for them
-            if (state.IsDisconnected)
-            {
-                DraftModePlugin.Logger.LogInfo($"[DraftManager] Skipping DC'd player slot {state.SlotNumber}");
-                FinalisePickForCurrentSlot(PickFullRandom());
-                return;
-            }
-
             state.IsPickingNow = true;
             TurnTimerRunning   = false;
 
-            DraftModePlugin.Logger.LogInfo(
             // ---- Forced card injection ------------------------------------------
             // If admin pinned a role for this slot's player, inject it and auto-pick.
-            LoggingSystem.Debug(
+            DraftModePlugin.Logger.LogInfo(
                 $"[DraftManager] OfferRoles: slot={state.SlotNumber} pid={state.PlayerId} " +
                 $"| forcedRoleId={_forcedRoleId?.ToString() ?? "null"} " +
                 $"forcedTarget={_forcedRoleTargetId} forcedName='{_forcedRoleName}'");
-
             if (_forcedRoleId.HasValue && state.PlayerId == _forcedRoleTargetId)
             {
                 ushort forcedId   = _forcedRoleId.Value;
@@ -462,7 +381,7 @@ namespace DraftModeTOUM.Managers
                 _forcedRoleId       = null;
                 _forcedRoleTargetId = 255;
 
-                LoggingSystem.Debug(
+                DraftModePlugin.Logger.LogInfo(
                     $"[DraftManager] Injecting forced card '{forcedName}' for slot {state.SlotNumber}");
 
                 var available2 = GetAvailableIds();
@@ -472,38 +391,43 @@ namespace DraftModeTOUM.Managers
                 while (offered2.Count < OfferedRolesCount)
                     offered2.Add((ushort)RoleTypes.Crewmate);
 
+                // Shuffle visually so position doesn't give it away
                 offered2 = offered2.OrderBy(_ => UnityEngine.Random.value).ToList();
                 int forcedIndex = offered2.IndexOf(forcedId);
 
                 state.OfferedRoleIds = offered2;
                 DraftNetworkHelper.SendTurnAnnouncement(state.SlotNumber, state.PlayerId, offered2, CurrentTurn);
 
+                // Auto-pick after animation
                 Coroutines.Start(CoAutoPickForced(state.PlayerId, forcedIndex));
                 return;
             }
 
+            // ---- Normal offer ---------------------------------------------------
             int target    = OfferedRolesCount;
             var available = GetAvailableIds();
             var offered   = new List<ushort>();
 
+            // Step 1: guaranteed faction card
             if (state.GuaranteedFaction.HasValue && available.Count > 0)
             {
                 var bucketPool = GetAvailableForFaction(state.GuaranteedFaction.Value);
                 if (bucketPool.Count > 0)
                 {
                     offered.AddRange(PickWeightedUnique(bucketPool, 1));
-                    LoggingSystem.Debug(
+                    DraftModePlugin.Logger.LogInfo(
                         $"[DraftManager] Slot {state.SlotNumber} guaranteed " +
                         $"{state.GuaranteedFaction.Value} card: {(RoleTypes)offered[0]}");
                 }
                 else
                 {
-                    LoggingSystem.Debug(
+                    DraftModePlugin.Logger.LogInfo(
                         $"[DraftManager] Slot {state.SlotNumber} guaranteed faction " +
                         $"{state.GuaranteedFaction.Value} is exhausted, filling with available");
                 }
             }
 
+            // Step 2: fill remaining slots
             int remaining = target - offered.Count;
 
             if (remaining > 0 && available.Count > 0)
@@ -544,13 +468,11 @@ namespace DraftModeTOUM.Managers
             DraftNetworkHelper.SendTurnAnnouncement(state.SlotNumber, state.PlayerId, state.OfferedRoleIds, CurrentTurn);
         }
 
+        // Auto-picks the forced card after the cards animate in
         private static IEnumerator CoAutoPickForced(byte playerId, int cardIndex)
         {
             yield return new WaitForSeconds(1.5f);
-            // FIX: Guard against draft ending while coroutine was waiting
-            if (!IsDraftActive) yield break;
             DraftModePlugin.Logger.LogInfo($"[DraftManager] Auto-submitting forced pick at index {cardIndex}");
-            LoggingSystem.Debug($"[DraftManager] Auto-submitting forced pick at index {cardIndex}");
             SubmitPick(playerId, cardIndex);
         }
 
@@ -572,9 +494,6 @@ namespace DraftModeTOUM.Managers
 
         private static void AutoPickRandom()
         {
-            // FIX: Guard — don't auto-pick if draft was cancelled while timer was running
-            if (!IsDraftActive) return;
-
             var state = GetCurrentPickerState();
             if (!ShowRandomOption && state != null && state.OfferedRoleIds.Count > 0)
                 FinalisePickForCurrentSlot(
@@ -592,18 +511,12 @@ namespace DraftModeTOUM.Managers
 
         private static void FinalisePickForCurrentSlot(ushort roleId)
         {
-            // FIX: Double-guard at the start of finalise to prevent processing
-            // a pick that arrived after the draft was cancelled
-            if (!IsDraftActive) return;
-
             var state = GetCurrentPickerState();
             if (state == null) return;
 
             state.ChosenRoleId = roleId;
             state.HasPicked    = true;
             state.IsPickingNow = false;
-
-            DraftNetworkHelper.BroadcastPickConfirmed(state.SlotNumber, roleId);
 
             _draftedCounts[roleId] = GetDraftedCount(roleId) + 1;
 
@@ -612,7 +525,7 @@ namespace DraftModeTOUM.Managers
             else if (faction == RoleFaction.NeutralKilling) _neutralKillingsDrafted++;
             else if (faction == RoleFaction.Neutral)        _neutralPassivesDrafted++;
 
-            LoggingSystem.Debug(
+            DraftModePlugin.Logger.LogInfo(
                 $"[DraftManager] Slot {state.SlotNumber} picked {(RoleTypes)roleId} ({faction}). " +
                 $"Caps: Imp={_impostorsDrafted}/{MaxImpostors}, " +
                 $"NK={_neutralKillingsDrafted}/{MaxNeutralKillings}, " +
@@ -625,7 +538,6 @@ namespace DraftModeTOUM.Managers
             {
                 ApplyAllRoles();
                 IsDraftActive = false;
-                TurnTimerRunning = false; // FIX: ensure timer stops on draft completion
                 DraftUiManager.CloseAll();
                 DraftStatusOverlay.SetState(OverlayState.BackgroundOnly);
                 var recapEntries = BuildRecapEntries();
@@ -672,11 +584,11 @@ namespace DraftModeTOUM.Managers
                 if (!state.ChosenRoleId.HasValue) continue;
                 if (state.PlayerId >= 200) continue;
                 PendingRoleAssignments[state.PlayerId] = (RoleTypes)state.ChosenRoleId.Value;
-                LoggingSystem.Debug(
+                DraftModePlugin.Logger.LogInfo(
                     $"[DraftManager] Queued {(RoleTypes)state.ChosenRoleId.Value} for player {state.PlayerId}");
             }
 
-            LoggingSystem.Debug(
+            DraftModePlugin.Logger.LogInfo(
                 $"[DraftManager] {PendingRoleAssignments.Count} roles queued for game start");
         }
 
@@ -685,7 +597,7 @@ namespace DraftModeTOUM.Managers
             if (!AmongUsClient.Instance.AmHost) return true;
             if (PendingRoleAssignments.Count == 0) return true;
 
-            LoggingSystem.Debug(
+            DraftModePlugin.Logger.LogInfo(
                 $"[DraftManager] Attempting to apply " +
                 $"{PendingRoleAssignments.Count - _appliedPlayers.Count} remaining roles...");
 
@@ -697,7 +609,7 @@ namespace DraftModeTOUM.Managers
                     .FirstOrDefault(x => x.PlayerId == kvp.Key);
                 if (p == null)
                 {
-                    LoggingSystem.Warning($"[DraftManager] Player {kvp.Key} not found yet — will retry");
+                    DraftModePlugin.Logger.LogWarning($"[DraftManager] Player {kvp.Key} not found yet — will retry");
                     continue;
                 }
 
@@ -705,12 +617,12 @@ namespace DraftModeTOUM.Managers
                 {
                     p.RpcSetRole(kvp.Value, false);
                     _appliedPlayers.Add(kvp.Key);
-                    LoggingSystem.Debug(
+                    DraftModePlugin.Logger.LogInfo(
                         $"[DraftManager] Applied {kvp.Value} to {p.Data.PlayerName} (id {kvp.Key})");
                 }
                 catch (Exception ex)
                 {
-                    LoggingSystem.Warning(
+                    DraftModePlugin.Logger.LogWarning(
                         $"[DraftManager] RpcSetRole failed for player {kvp.Key}: {ex.Message} — will retry");
                 }
             }
@@ -718,7 +630,7 @@ namespace DraftModeTOUM.Managers
             bool allDone = _appliedPlayers.Count >= PendingRoleAssignments.Count;
             if (allDone)
             {
-                LoggingSystem.Debug("[DraftManager] All roles applied successfully.");
+                DraftModePlugin.Logger.LogInfo("[DraftManager] All roles applied successfully.");
                 PendingRoleAssignments.Clear();
                 _appliedPlayers.Clear();
             }
@@ -730,7 +642,7 @@ namespace DraftModeTOUM.Managers
             if (!AmongUsClient.Instance.AmHost) yield break;
             if (PendingRoleAssignments.Count == 0) yield break;
 
-            LoggingSystem.Debug("[DraftManager] Starting role application retry loop...");
+            DraftModePlugin.Logger.LogInfo("[DraftManager] Starting role application retry loop...");
 
             float elapsed  = 0f;
             float timeout  = 10f;
@@ -744,14 +656,14 @@ namespace DraftModeTOUM.Managers
                 bool done = ApplyPendingRolesOnGameStart();
                 if (done)
                 {
-                    LoggingSystem.Debug($"[DraftManager] Role retry loop finished after {elapsed:F1}s");
+                    DraftModePlugin.Logger.LogInfo($"[DraftManager] Role retry loop finished after {elapsed:F1}s");
                     yield break;
                 }
             }
 
             if (PendingRoleAssignments.Count > 0)
             {
-                LoggingSystem.Warning("[DraftManager] Retry loop timed out — falling back to UpCommandRequests");
+                DraftModePlugin.Logger.LogWarning("[DraftManager] Retry loop timed out — falling back to UpCommandRequests");
                 foreach (var kvp in PendingRoleAssignments)
                 {
                     if (_appliedPlayers.Contains(kvp.Key)) continue;
@@ -760,7 +672,7 @@ namespace DraftModeTOUM.Managers
                     if (role != null && p != null)
                     {
                         UpCommandRequests.SetRequest(p.Data.PlayerName, role.NiceName);
-                        LoggingSystem.Debug(
+                        DraftModePlugin.Logger.LogInfo(
                             $"[DraftManager] UpCommandRequests fallback: {role.NiceName} for {p.Data.PlayerName}");
                     }
                 }
@@ -836,25 +748,15 @@ namespace DraftModeTOUM.Managers
 
         // ---- End sequence -------------------------------------------------------
 
-        public static void TriggerEndDraftSequence()
-        {
-            if (_endSequenceRunning) return; // FIX: prevent double-trigger
-            _endSequenceRunning = true;
-            Coroutines.Start(CoEndDraftSequence());
-        }
+        public static void TriggerEndDraftSequence() => Coroutines.Start(CoEndDraftSequence());
 
         private static IEnumerator CoEndDraftSequence()
         {
             yield return new WaitForSeconds(ShowRecap ? 5.0f : 0.5f);
-
-            // FIX: Check if we were reset/cancelled while waiting
-            if (!_endSequenceRunning) yield break;
-
             try { DraftRecapOverlay.Hide(); } catch { }
 
             if (!AutoStartAfterDraft)
             {
-                _endSequenceRunning = false;
                 try { DraftStatusOverlay.SetState(OverlayState.Hidden); } catch { }
                 yield break;
             }
@@ -874,7 +776,6 @@ namespace DraftModeTOUM.Managers
             }
 
             yield return new WaitForSeconds(0.6f);
-            _endSequenceRunning = false;
             try { DraftStatusOverlay.SetState(OverlayState.Hidden); } catch { }
         }
     }
