@@ -649,9 +649,5 @@
       <Private>False</Private>
     </Reference>
   </ItemGroup>
-  <ItemGroup>
-        <EmbeddedResource Include="modinfo.json"/>
-        <EmbeddedResource Include="DraftLogo.png"/>
-    </ItemGroup>
 
 </Project>

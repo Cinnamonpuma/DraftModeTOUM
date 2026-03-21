@@ -52,10 +52,8 @@ namespace DraftModeTOUM.Patches
                 }
                 else
                 {
-                    DraftNetworkHelper.BroadcastCancelDraft();
                     DraftManager.Reset(cancelledBeforeCompletion: true);
                     DraftManager.SendChatLocal("<color=#FFD700>Draft has been cancelled by the host.</color>");
-                    DraftNetworkHelper.BroadcastDraftEnd();
                 }
                 ClearChat(__instance);
                 return false;
