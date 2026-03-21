@@ -11,10 +11,10 @@ namespace DraftModeTOUM.Managers
     public sealed class DraftRolePool
     {
         // Keyed by RoleTypes cast to ushort — no name strings in the pool at all
-        public List<ushort>                    RoleIds    { get; } = new();
-        public Dictionary<ushort, int>         MaxCounts  { get; } = new();
-        public Dictionary<ushort, int>         Weights    { get; } = new();
-        public Dictionary<ushort, RoleFaction> Factions   { get; } = new();
+        public List<ushort> RoleIds { get; } = new();
+        public Dictionary<ushort, int> MaxCounts { get; } = new();
+        public Dictionary<ushort, int> Weights { get; } = new();
+        public Dictionary<ushort, RoleFaction> Factions { get; } = new();
     }
 
     public static class RolePoolBuilder
@@ -55,8 +55,6 @@ namespace DraftModeTOUM.Managers
                 ? GameData.Instance.AllPlayers.ToArray().Count(p => p != null && !p.Disconnected)
                 : 10;
 
-            // GetPotentialRoles() already filters by game mode, role chances, and count —
-            // use it as the authoritative source instead of re-implementing that logic
             IEnumerable<RoleBehaviour> roles;
             try
             {
@@ -83,14 +81,16 @@ namespace DraftModeTOUM.Managers
                         continue;
                 }
 
+                // Filter out Hide and Seek exclusive roles by namespace
+                var ns = role.GetType().Namespace;
+                if (ns != null && (ns.Contains("HnsCrewmate") || ns.Contains("HnsImpostor"))) continue;
+
                 if (IsBannedRole(role.NiceName)) continue;
 
-                int count  = roleOptions.GetNumPerGame(role.Role);
+                int count = roleOptions.GetNumPerGame(role.Role);
                 int chance = roleOptions.GetChancePerGame(role.Role);
                 if (count <= 0 || chance <= 0) continue;
 
-                // Cap count against player count so we never offer a role
-                // more times than there are players who could receive it
                 int cappedCount = Math.Min(count, playerCount);
 
                 var faction = role.IsImpostor
@@ -106,7 +106,7 @@ namespace DraftModeTOUM.Managers
         private static readonly HashSet<string> _bannedRoles =
             new(StringComparer.OrdinalIgnoreCase)
             {
-                "Haunter", "Spectre", "Teleporter", "Pestilence", "Traitor", "Mayor", "Spectator", "CrewmateGhost", "ImpostorGhost", "GuardianAngel"
+                "Haunter", "Spectre", "Teleporter", "Pestilence", "Traitor", "Mayor"
             };
 
         public static bool IsBannedRole(string niceName) => _bannedRoles.Contains(niceName);
@@ -117,13 +117,13 @@ namespace DraftModeTOUM.Managers
             {
                 pool.RoleIds.Add(roleId);
                 pool.MaxCounts[roleId] = Math.Max(1, maxCount);
-                pool.Weights[roleId]   = Math.Max(1, weight);
-                pool.Factions[roleId]  = faction;
+                pool.Weights[roleId] = Math.Max(1, weight);
+                pool.Factions[roleId] = faction;
             }
             else
             {
                 pool.MaxCounts[roleId] = Math.Max(pool.MaxCounts[roleId], maxCount);
-                pool.Weights[roleId]   = Math.Max(pool.Weights[roleId], weight);
+                pool.Weights[roleId] = Math.Max(pool.Weights[roleId], weight);
             }
         }
 
@@ -136,9 +136,15 @@ namespace DraftModeTOUM.Managers
                 if (IsBannedRole(role.NiceName)) continue;
                 if (role.Role is RoleTypes.CrewmateGhost or RoleTypes.ImpostorGhost or RoleTypes.GuardianAngel) continue;
 
+                // Filter out Hide and Seek exclusive roles by namespace
+                var ns = role.GetType().Namespace;
+                if (ns != null && (ns.Contains("HnsCrewmate") || ns.Contains("HnsImpostor"))) continue;
+
                 var faction = role.IsImpostor
                     ? RoleFaction.Impostor
-                    : ((role is MiraAPI.Roles.ICustomRole cr__ && cr__.Team != ModdedRoleTeams.Crewmate && cr__.Team != ModdedRoleTeams.Impostor) ? RoleCategory.GetFactionFromRole(role) : RoleFaction.Crewmate);
+                    : ((role is MiraAPI.Roles.ICustomRole cr__ && cr__.Team != ModdedRoleTeams.Crewmate && cr__.Team != ModdedRoleTeams.Impostor)
+                        ? RoleCategory.GetFactionFromRole(role)
+                        : RoleFaction.Crewmate);
 
                 AddRole(pool, (ushort)role.Role, 1, 100, faction);
             }

@@ -30,8 +30,7 @@ namespace DraftModeTOUM
         public override void Load()
         {
             Logger = Log;
-            LoggingSystem.Initialize(Logger);
-            LoggingSystem.Info($"DraftModeTOUM v{PluginInfo.PLUGIN_VERSION} loading...");
+            Logger.LogInfo($"DraftModeTOUM v{PluginInfo.PLUGIN_VERSION} loading...");
 
             try
             {
@@ -41,16 +40,19 @@ namespace DraftModeTOUM
                 ClassInjector.RegisterTypeInIl2Cpp<DraftCircleMinigame>();
                 ClassInjector.RegisterTypeInIl2Cpp<DraftStatusOverlay>();
                 ClassInjector.RegisterTypeInIl2Cpp<DraftRecapOverlay>();
-                LoggingSystem.Debug("Draft UI Components registered.");
+                Logger.LogInfo("Draft UI Components registered.");
             }
             catch (System.Exception ex)
             {
-                LoggingSystem.Error($"Failed to register types: {ex}");
+                Logger.LogError($"Failed to register types: {ex}");
             }
 
             _harmony = new Harmony(PluginInfo.PLUGIN_GUID);
             _harmony.PatchAll();
             PatchLobbyCodeMethod(_harmony);
+
+            // DraftDashboardReporter is started lazily from MainMenuManagerPatch
+            // and re-ensured on lobby join — NOT here, as Unity scene isn't ready during Load().
 
             Logger.LogInfo("DraftModeTOUM loaded successfully!");
         }
@@ -61,6 +63,11 @@ namespace DraftModeTOUM
             return base.Unload();
         }
 
+        /// <summary>
+        /// Scans all loaded assemblies for a static method that converts a lobby code
+        /// string (e.g. "STICKY") to an int, then patches it to capture the code.
+        /// This is necessary because GameCode class name differs across IL2CPP versions.
+        /// </summary>
         public static void PatchLobbyCodeMethod(Harmony harmony)
         {
             try
@@ -117,6 +124,9 @@ namespace DraftModeTOUM
         {
             try
             {
+                // Use __args to capture the first parameter by position rather than by name,
+                // because different Among Us builds name the parameter differently
+                // ("gameCode", "gameId", etc.) which causes HarmonyX to fail.
                 string gameCode = (__args != null && __args.Length > 0) ? __args[0] : null;
                 if (!string.IsNullOrWhiteSpace(gameCode))
                 {
@@ -133,7 +143,7 @@ namespace DraftModeTOUM
     {
         public const string PLUGIN_GUID = "com.draftmodetoun.mod";
         public const string PLUGIN_NAME = "DraftModeTOUM";
-        public const string PLUGIN_VERSION = "1.0.6";
+        public const string PLUGIN_VERSION = "1.0.5";
     }
 
     [HarmonyPatch(typeof(AmongUsClient), nameof(AmongUsClient.OnDisconnected))]
@@ -147,10 +157,6 @@ namespace DraftModeTOUM
             DraftRecapOverlay.Hide();
             bool draftStillInProgress = DraftManager.IsDraftActive;
             DraftManager.Reset(cancelledBeforeCompletion: draftStillInProgress);
-
-            // FIX: Clear HUD refs before ClearLobbyCode so nothing tries to restore
-            // dead lobby-scene GameObjects on the next lobby load.
-            DraftStatusOverlay.ClearHudReferences();
             DraftDashboardReporter.ClearLobbyCode();
             DraftModePlugin.Logger.LogInfo($"[DraftModePlugin] Session cleared on disconnect.");
         }
@@ -163,6 +169,7 @@ namespace DraftModeTOUM
         public static void Postfix()
         {
             DraftScreenController.Hide();
+            // Do NOT hide DraftStatusOverlay here to avoid lobby flash.
             DraftRecapOverlay.Hide();
             DraftModePlugin.Logger.LogInfo("[DraftModePlugin] Game starting...");
         }
@@ -174,6 +181,7 @@ namespace DraftModeTOUM
         [HarmonyPrefix]
         public static void Prefix()
         {
+            // Backup method: Hides overlay when "Shhh" screen appears
             DraftScreenController.Hide();
             DraftStatusOverlay.SetState(OverlayState.Hidden);
             DraftRecapOverlay.Hide();
@@ -186,12 +194,17 @@ namespace DraftModeTOUM
         [HarmonyPostfix]
         public static void Postfix()
         {
+            // Ultimate backup: Hides overlay when map loads
             DraftScreenController.Hide();
             DraftStatusOverlay.SetState(OverlayState.Hidden);
             DraftRecapOverlay.Hide();
         }
     }
 
+    /// <summary>
+    /// Start the reporter as soon as the main menu is alive.
+    /// This is the earliest point where Unity scene/GameObject creation is safe.
+    /// </summary>
     [HarmonyPatch(typeof(MainMenuManager), nameof(MainMenuManager.Start))]
     public static class MainMenuManagerStartPatch
     {
@@ -199,12 +212,14 @@ namespace DraftModeTOUM
         public static void Postfix()
         {
             DraftDashboardReporter.EnsureExists();
-            // FIX: Clear stale HUD refs when returning to main menu
-            DraftStatusOverlay.ClearHudReferences();
             DraftModePlugin.Logger.LogInfo("[DraftModePlugin] DashboardReporter ensured from MainMenu.");
         }
     }
 
+    /// <summary>
+    /// Re-ensure the reporter every time we successfully join a server,
+    /// in case it was destroyed during a previous session.
+    /// </summary>
     [HarmonyPatch(typeof(AmongUsClient), nameof(AmongUsClient.OnGameJoined))]
     public static class OnGameJoinedPatch
     {
@@ -214,14 +229,21 @@ namespace DraftModeTOUM
             DraftDashboardReporter.EnsureExists();
             DraftModePlugin.Logger.LogInfo("[DraftModePlugin] DashboardReporter ensured on game join.");
 
+            // Fallback: directly read the game code from AmongUsClient so the lobby
+            // code is always captured even if the GameCode.GameNameToIntV2 patch missed it.
             try
             {
                 string gameId = __instance.GameId.ToString();
                 if (!string.IsNullOrWhiteSpace(gameId) && gameId != "0")
                 {
+                    // GameId is an int on official servers but modded servers (Impostor)
+                    // also supply a word code via the join URL — try to reconstruct it
+                    // from the raw int using GameCode.IntToGameName if it exists,
+                    // otherwise just use the int as a string so the dashboard shows *something*.
                     string code = gameId;
                     try
                     {
+                        // Use standard .NET reflection on the IL2CPP-proxied type
                         var gcType = typeof(InnerNet.GameCode);
                         foreach (var m in gcType.GetMethods(
                             System.Reflection.BindingFlags.Static |
