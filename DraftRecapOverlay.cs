@@ -122,7 +122,7 @@ namespace DraftModeTOUM
             go.transform.SetParent(parent.transform, false);
             go.transform.localPosition = pos;
 
-            var tmp = go.AddComponent<TextMeshPro>();
+            var tmp = go.AddComponent(Il2CppInterop.Runtime.Il2CppType.Of<TextMeshPro>()).Cast<TextMeshPro>();
             tmp.font = font;
             tmp.fontMaterial = fontMat;
             tmp.fontSize = size;

@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using DraftModeTOUM.Managers;
 using UnityEngine;
@@ -10,24 +11,29 @@ using UnityEngine;
 namespace DraftModeTOUM
 {
     /// <summary>
-    /// Sends heartbeats to the DraftMode PHP dashboard every 10s.
+    /// Sends heartbeats to the DraftMode PHP dashboard every 3s.
     /// User ID is generated once and stored in BepInEx/config/DraftModeTOUM.userid
     /// so it's stable across sessions without touching any game API.
     /// </summary>
     public class DraftDashboardReporter : MonoBehaviour
     {
         private const string HeartbeatUrl      = "https://mckelanor.xyz/au/draft/admin/api/heartbeat.php";
+        private const string ConsumeForcedRoleUrl = "https://mckelanor.xyz/au/draft/admin/api/consume-forced-role.php";
         private const float  HeartbeatInterval = 3f;
 
         private static DraftDashboardReporter _instance;
-        private static readonly HttpClient    _http = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
+        private static readonly HttpClient    _http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
 
-        // Loaded once on first heartbeat, then cached
         private static string _userId = null;
 
-        private float  _nextHeartbeat     = 0f; // fire on first tick
+        private float  _nextHeartbeat     = 0f;
         private static string _pendingForcedRole = null;
         private static string _cachedLobbyCode   = "";
+
+        // FIX: CancellationTokenSource per session so in-flight HTTP tasks are
+        // cancelled immediately on disconnect, preventing them from touching
+        // game state (e.g. _pendingForcedRole) after it has been cleared.
+        private static CancellationTokenSource _cts = new CancellationTokenSource();
 
         // ── Singleton ────────────────────────────────────────────────────────────
 
@@ -54,7 +60,6 @@ namespace DraftModeTOUM
 
         private void Update()
         {
-            // Apply forced role on main thread
             if (_pendingForcedRole != null)
             {
                 string role = _pendingForcedRole;
@@ -85,15 +90,17 @@ namespace DraftModeTOUM
                 string lobbyCode = GetLobbyCode();
                 bool   isHost    = AmongUsClient.Instance != null && AmongUsClient.Instance.AmHost;
 
-                Task.Run(async () => await PostHeartbeat(userId, name, lobbyCode, isHost));
+                // FIX: Pass the current token so tasks cancel on disconnect
+                var token = _cts.Token;
+                Task.Run(async () => await PostHeartbeat(userId, name, lobbyCode, isHost, token), token);
             }
             catch (Exception ex)
             {
-                DraftModePlugin.Logger.LogWarning($"[DashboardReporter] Send setup failed: {ex.Message}");
+                LoggingSystem.Warning($"[DashboardReporter] Send setup failed: {ex.Message}");
             }
         }
 
-        private static async Task PostHeartbeat(string userId, string name, string lobbyCode, bool isHost)
+        private static async Task PostHeartbeat(string userId, string name, string lobbyCode, bool isHost, CancellationToken ct)
         {
             try
             {
@@ -107,15 +114,27 @@ namespace DraftModeTOUM
                     "}}";
 
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
-                var resp    = await _http.PostAsync(HeartbeatUrl, content);
+
+                // FIX: Use CancellationToken so this request aborts on disconnect
+                using var req = new HttpRequestMessage(HttpMethod.Post, HeartbeatUrl) { Content = content };
+                var resp    = await _http.SendAsync(req, ct);
                 string body = await resp.Content.ReadAsStringAsync();
 
                 DraftModePlugin.Logger.LogInfo($"[DashboardReporter] Heartbeat {resp.StatusCode}");
+
+                // FIX: Only parse response if not cancelled
+                if (!ct.IsCancellationRequested)
+                    ParseResponse(body);
+            }
+            catch (OperationCanceledException)
+            {
+                // Normal on disconnect — don't log as error
+                LoggingSystem.Debug($"[DashboardReporter] Heartbeat {resp.StatusCode}");
                 ParseResponse(body);
             }
             catch (Exception ex)
             {
-                DraftModePlugin.Logger.LogWarning($"[DashboardReporter] Heartbeat failed: {ex.Message}");
+                LoggingSystem.Warning($"[DashboardReporter] Heartbeat failed: {ex.Message}");
             }
         }
 
@@ -134,7 +153,7 @@ namespace DraftModeTOUM
                     string role = fr.GetString();
                     if (!string.IsNullOrWhiteSpace(role))
                     {
-                        DraftModePlugin.Logger.LogInfo($"[DashboardReporter] Forced role queued: {role}");
+                        LoggingSystem.Debug($"[DashboardReporter] Forced role queued: {role}");
                         _pendingForcedRole = role;
                     }
                 }
@@ -142,31 +161,45 @@ namespace DraftModeTOUM
             catch { }
         }
 
-        // ── Forced role (pins a card into the player's next draft offer) ──────────
+        // ── Forced role ───────────────────────────────────────────────────────────
 
         private static void ApplyForcedRole(string roleName)
         {
             try
             {
                 DraftModePlugin.Logger.LogInfo($"[DashboardReporter] Relaying forced role '{roleName}' to host");
+                LoggingSystem.Debug($"[DashboardReporter] Relaying forced role '{roleName}' to host...");
                 // Always go through the RPC helper:
                 // • If this client IS the host → sets it directly on DraftManager
                 // • If this client is NOT the host → sends ForceRole RPC to host
                 DraftModeTOUM.Patches.DraftNetworkHelper.SendForceRoleToHost(roleName);
+                
+                // DO NOT consume here - the role stays in queue until the draft actually uses it
+                // It will be consumed by DraftManager when the draft offer is generated
             }
             catch (Exception ex)
             {
-                DraftModePlugin.Logger.LogError($"[DashboardReporter] ApplyForcedRole failed: {ex.Message}");
+                LoggingSystem.Error($"[DashboardReporter] ApplyForcedRole failed: {ex.Message}");
+            }
+        }
+
+        private static async Task ConsumeForcedRole(string userId)
+        {
+            try
+            {
+                string json = "{\"userId\":\"" + Esc(userId) + "\"}";
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var resp = await _http.PostAsync(ConsumeForcedRoleUrl, content);
+                LoggingSystem.Debug($"[DashboardReporter] Forced role consumed from queue");
+            }
+            catch (Exception ex)
+            {
+                LoggingSystem.Warning($"[DashboardReporter] Failed to consume forced role: {ex.Message}");
             }
         }
 
         // ── User ID (file-based) ──────────────────────────────────────────────────
 
-        /// <summary>
-        /// Returns the persistent user ID, creating it if it doesn't exist yet.
-        /// Stored at: BepInEx/config/DraftModeTOUM.userid
-        /// Format:    DRAFT-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  (DRAFT- + 32 hex chars)
-        /// </summary>
         private static string GetOrCreateUserId()
         {
             if (_userId != null) return _userId;
@@ -181,22 +214,20 @@ namespace DraftModeTOUM
                     if (existing.StartsWith("DRAFT-") && existing.Length > 6)
                     {
                         _userId = existing;
-                        DraftModePlugin.Logger.LogInfo($"[DashboardReporter] Loaded user ID: {_userId}");
+                        LoggingSystem.Debug($"[DashboardReporter] Loaded user ID: {_userId}");
                         return _userId;
                     }
                 }
 
-                // Generate a new one
                 string newId = "DRAFT-" + Guid.NewGuid().ToString("N").ToUpperInvariant();
                 File.WriteAllText(path, newId);
                 _userId = newId;
-                DraftModePlugin.Logger.LogInfo($"[DashboardReporter] Created new user ID: {_userId}");
+                LoggingSystem.Debug($"[DashboardReporter] Created new user ID: {_userId}");
             }
             catch (Exception ex)
             {
-                // If file IO fails for any reason, use a session-only fallback
                 _userId = "DRAFT-" + Guid.NewGuid().ToString("N").ToUpperInvariant();
-                DraftModePlugin.Logger.LogWarning($"[DashboardReporter] Could not read/write userid file: {ex.Message}. Using session ID: {_userId}");
+                LoggingSystem.Warning($"[DashboardReporter] Could not read/write userid file: {ex.Message}. Using session ID: {_userId}");
             }
 
             return _userId;
@@ -216,17 +247,29 @@ namespace DraftModeTOUM
             catch { return false; }
         }
 
-        /// <summary>
-        /// Called from OnGameJoinedPatch to capture the lobby code string
-        /// exactly as the server assigned it (word codes like "ANKLET").
-        /// </summary>
         public static void CacheLobbyCode(string code)
         {
             _cachedLobbyCode = string.IsNullOrWhiteSpace(code) ? "" : code.Trim().ToUpperInvariant();
-            DraftModePlugin.Logger.LogInfo($"[DashboardReporter] Cached lobby code: {_cachedLobbyCode}");
+            LoggingSystem.Debug($"[DashboardReporter] Cached lobby code: {_cachedLobbyCode}");
         }
 
-        public static void ClearLobbyCode() => _cachedLobbyCode = "";
+        public static void ClearLobbyCode()
+        {
+            _cachedLobbyCode = "";
+
+            // FIX: Cancel all in-flight heartbeat tasks and create a fresh token
+            // so no stale callbacks fire after the session ends.
+            try
+            {
+                _cts.Cancel();
+                _cts.Dispose();
+            }
+            catch { }
+            _cts = new CancellationTokenSource();
+
+            // FIX: Also clear any pending forced role from the old session
+            _pendingForcedRole = null;
+        }
 
         private static string GetLobbyCode() => _cachedLobbyCode;
 
