@@ -479,6 +479,7 @@ namespace DraftModeTOUM.Managers
                 DraftNetworkHelper.SendTurnAnnouncement(state.SlotNumber, state.PlayerId, offered2, CurrentTurn);
 
                 Coroutines.Start(CoAutoPickForced(state.PlayerId, forcedIndex));
+                DraftDashboardReporter.TryConsumeForcedRole();
                 return;
             }
 

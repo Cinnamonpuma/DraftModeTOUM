@@ -12,8 +12,8 @@ namespace DraftModeTOUM
 {
     /// <summary>
     /// Sends heartbeats to the DraftMode PHP dashboard every 3s.
-    /// User ID is generated once and stored in BepInEx/config/DraftModeTOUM.userid
-    /// so it's stable across sessions without touching any game API.
+    /// User ID is read from BepInEx/config/DraftModeTOUM.userid.
+    /// If missing/empty, dashboard integration is disabled until the file exists.
     /// </summary>
     public class DraftDashboardReporter : MonoBehaviour
     {
@@ -25,6 +25,8 @@ namespace DraftModeTOUM
         private static readonly HttpClient    _http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
 
         private static string _userId = null;
+        private static bool _warnedNoUserId = false;
+        private static string _anonId = null;
 
         private float  _nextHeartbeat     = 0f;
         private static string _pendingForcedRole = null;
@@ -85,14 +87,25 @@ namespace DraftModeTOUM
                 var me = PlayerControl.LocalPlayer;
                 if (me == null || me.Data == null) return;
 
-                string userId    = GetOrCreateUserId();
                 string name      = me.Data.PlayerName ?? me.name;
                 string lobbyCode = GetLobbyCode();
                 bool   isHost    = AmongUsClient.Instance != null && AmongUsClient.Instance.AmHost;
+                string userId    = GetUserId();
+                bool   hasId     = !string.IsNullOrWhiteSpace(userId);
+
+                if (!hasId)
+                {
+                    if (!_warnedNoUserId)
+                    {
+                        _warnedNoUserId = true;
+                        LoggingSystem.Warning("[DashboardReporter] DraftModeTOUM.userid missing/empty. Admin actions disabled until created.");
+                    }
+                    userId = BuildAnonId();
+                }
 
                 // FIX: Pass the current token so tasks cancel on disconnect
                 var token = _cts.Token;
-                Task.Run(async () => await PostHeartbeat(userId, name, lobbyCode, isHost, token), token);
+                Task.Run(async () => await PostHeartbeat(userId, name, lobbyCode, isHost, hasId, token), token);
             }
             catch (Exception ex)
             {
@@ -100,7 +113,7 @@ namespace DraftModeTOUM
             }
         }
 
-        private static async Task PostHeartbeat(string userId, string name, string lobbyCode, bool isHost, CancellationToken ct)
+        private static async Task PostHeartbeat(string userId, string name, string lobbyCode, bool isHost, bool hasId, CancellationToken ct)
         {
             try
             {
@@ -110,7 +123,8 @@ namespace DraftModeTOUM
                     "\"name\":\""      + Esc(name)      + "\"," +
                     "\"lobbyCode\":\"" + Esc(lobbyCode) + "\"," +
                     "\"gameState\":\"lobby\"," +
-                    "\"isHost\":"      + (isHost ? "true" : "false") +
+                    "\"isHost\":"      + (isHost ? "true" : "false") + "," +
+                    "\"hasId\":"       + (hasId ? "true" : "false") +
                     "}}";
 
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -182,6 +196,20 @@ namespace DraftModeTOUM
             }
         }
 
+        public static void TryConsumeForcedRole()
+        {
+            try
+            {
+                string userId = GetUserId();
+                if (string.IsNullOrWhiteSpace(userId)) return;
+                Task.Run(async () => await ConsumeForcedRole(userId));
+            }
+            catch (Exception ex)
+            {
+                LoggingSystem.Warning($"[DashboardReporter] Failed to queue consume: {ex.Message}");
+            }
+        }
+
         private static async Task ConsumeForcedRole(string userId)
         {
             try
@@ -199,7 +227,7 @@ namespace DraftModeTOUM
 
         // ── User ID (file-based) ──────────────────────────────────────────────────
 
-        private static string GetOrCreateUserId()
+        private static string GetUserId()
         {
             if (_userId != null) return _userId;
 
@@ -210,26 +238,20 @@ namespace DraftModeTOUM
                 if (File.Exists(path))
                 {
                     string existing = File.ReadAllText(path).Trim();
-                    if (existing.StartsWith("DRAFT-") && existing.Length > 6)
+                    if (!string.IsNullOrWhiteSpace(existing))
                     {
                         _userId = existing;
                         LoggingSystem.Debug($"[DashboardReporter] Loaded user ID: {_userId}");
                         return _userId;
                     }
                 }
-
-                string newId = "DRAFT-" + Guid.NewGuid().ToString("N").ToUpperInvariant();
-                File.WriteAllText(path, newId);
-                _userId = newId;
-                LoggingSystem.Debug($"[DashboardReporter] Created new user ID: {_userId}");
             }
             catch (Exception ex)
             {
-                _userId = "DRAFT-" + Guid.NewGuid().ToString("N").ToUpperInvariant();
-                LoggingSystem.Warning($"[DashboardReporter] Could not read/write userid file: {ex.Message}. Using session ID: {_userId}");
+                LoggingSystem.Warning($"[DashboardReporter] Could not read userid file: {ex.Message}");
             }
 
-            return _userId;
+            return null;
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────────
@@ -268,6 +290,15 @@ namespace DraftModeTOUM
 
             // FIX: Also clear any pending forced role from the old session
             _pendingForcedRole = null;
+        }
+
+        private static string BuildAnonId()
+        {
+            if (string.IsNullOrWhiteSpace(_anonId))
+            {
+                _anonId = Guid.NewGuid().ToString("N").ToUpperInvariant().Substring(0, 10);
+            }
+            return $"ANON-{_anonId}";
         }
 
         private static string GetLobbyCode() => _cachedLobbyCode;
