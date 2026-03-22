@@ -44,6 +44,7 @@ namespace DraftModeTOUM.Managers
         public static bool UseRoleChances        { get; set; } = true;
         public static int  OfferedRolesCount     { get; set; } = 3;
         public static bool ShowRandomOption      { get; set; } = true;
+        public static int  ConcurrentPickCount   { get; set; } = 1;
 
         public static int MaxImpostors       { get; set; } = 2;
         public static int MaxNeutralKillings { get; set; } = 2;
@@ -60,6 +61,13 @@ namespace DraftModeTOUM.Managers
         private static Dictionary<byte, int>             _pidToSlot     = new();
         private static DraftRolePool                     _pool          = new();
         private static Dictionary<ushort, int>           _draftedCounts = new();
+
+        private static int _turnIndex = 0; // 0-based index into TurnOrder for current round
+        private static List<int> _activeSlots = new();
+        private static readonly HashSet<ushort> _roundOfferReserved = new();
+        private static readonly HashSet<ushort> _roundChosenRoles   = new();
+        private static readonly HashSet<byte>   _roundReadyPickers  = new();
+        private static bool _suppressAdvance = false;
 
         public static readonly Dictionary<byte, RoleTypes> PendingRoleAssignments = new();
         private static readonly HashSet<byte>              _appliedPlayers        = new();
@@ -101,8 +109,22 @@ namespace DraftModeTOUM.Managers
 
         public static PlayerDraftState GetCurrentPickerState()
         {
-            if (!IsDraftActive || CurrentTurn < 1 || CurrentTurn > TurnOrder.Count) return null;
+            if (!IsDraftActive) return null;
+            if (_activeSlots.Count > 0)
+                return GetStateForSlot(_activeSlots[0]);
+            if (CurrentTurn < 1 || CurrentTurn > TurnOrder.Count) return null;
             return GetStateForSlot(TurnOrder[CurrentTurn - 1]);
+        }
+
+        public static List<PlayerDraftState> GetActivePickerStates()
+        {
+            var list = new List<PlayerDraftState>();
+            foreach (var slot in _activeSlots)
+            {
+                var s = GetStateForSlot(slot);
+                if (s != null) list.Add(s);
+            }
+            return list;
         }
 
         // ---- Client sync --------------------------------------------------------
@@ -110,13 +132,30 @@ namespace DraftModeTOUM.Managers
         public static void SetClientTurn(int turnNumber, int currentPickerSlot)
         {
             if (AmongUsClient.Instance.AmHost) return;
-            CurrentTurn  = turnNumber;
-            TurnTimeLeft = TurnDuration;
-            foreach (var state in _slotMap.Values)
+            bool newRound = turnNumber != CurrentTurn;
+            if (newRound)
             {
-                state.IsPickingNow = (state.SlotNumber == currentPickerSlot);
-                if (state.SlotNumber < currentPickerSlot) state.HasPicked = true;
+                CurrentTurn  = turnNumber;
+                TurnTimeLeft = TurnDuration;
+                int turnStartIndex = Math.Max(0, turnNumber - 1);
+                foreach (var state in _slotMap.Values)
+                {
+                    int idx = TurnOrder.IndexOf(state.SlotNumber);
+                    if (idx >= 0 && idx < turnStartIndex)
+                    {
+                        state.HasPicked = true;
+                        state.IsPickingNow = false;
+                    }
+                    else if (!state.HasPicked)
+                    {
+                        state.IsPickingNow = false;
+                    }
+                }
             }
+
+            var current = GetStateForSlot(currentPickerSlot);
+            if (current != null && !current.HasPicked)
+                current.IsPickingNow = true;
         }
 
         public static void SetDraftStateFromHost(int totalSlots, List<byte> playerIds, List<int> slotNumbers)
@@ -136,6 +175,11 @@ namespace DraftModeTOUM.Managers
             TurnOrder    = _slotMap.Keys.OrderBy(s => s).ToList();
             CurrentTurn  = 1;
             TurnTimeLeft = TurnDuration;
+            _turnIndex   = 0;
+            _activeSlots.Clear();
+            _roundOfferReserved.Clear();
+            _roundChosenRoles.Clear();
+            _roundReadyPickers.Clear();
             DraftStatusOverlay.SetState(OverlayState.Waiting);
         }
 
@@ -189,6 +233,11 @@ namespace DraftModeTOUM.Managers
             TurnOrder     = _slotMap.Keys.OrderBy(s => s).ToList();
             CurrentTurn   = 1;
             TurnTimeLeft  = TurnDuration;
+            _turnIndex    = 0;
+            _activeSlots.Clear();
+            _roundOfferReserved.Clear();
+            _roundChosenRoles.Clear();
+            _roundReadyPickers.Clear();
             IsDraftActive = true;
 
             AssignFactionBuckets();
@@ -198,7 +247,7 @@ namespace DraftModeTOUM.Managers
             DraftNetworkHelper.BroadcastSlotNotifications(_pidToSlot);
 
             DraftStatusOverlay.SetState(OverlayState.Waiting);
-            OfferRolesToCurrentPicker();
+            StartRound();
         }
 
         // ---- Forced role resolution ---------------------------------------------
@@ -369,6 +418,11 @@ namespace DraftModeTOUM.Managers
             _pool = new DraftRolePool();
             _draftedCounts.Clear();
             TurnOrder.Clear();
+            _turnIndex = 0;
+            _activeSlots.Clear();
+            _roundOfferReserved.Clear();
+            _roundChosenRoles.Clear();
+            _roundReadyPickers.Clear();
 
             _impostorsDrafted       = 0;
             _neutralKillingsDrafted = 0;
@@ -392,6 +446,42 @@ namespace DraftModeTOUM.Managers
             TurnTimerRunning = true;
         }
 
+        public static void NotifyPickerReady(byte playerId)
+        {
+            if (!IsDraftActive || !AmongUsClient.Instance.AmHost) return;
+            var state = GetStateForPlayer(playerId);
+            if (state == null || state.HasPicked) return;
+            if (!_activeSlots.Contains(state.SlotNumber)) return;
+
+            _roundReadyPickers.Add(playerId);
+            int needed = 0;
+            foreach (var slot in _activeSlots)
+            {
+                var s = GetStateForSlot(slot);
+                if (s != null && !s.HasPicked && !s.IsDisconnected) needed++;
+            }
+
+            if (needed > 0 && _roundReadyPickers.Count >= needed)
+                TurnTimerRunning = true;
+        }
+
+        public static void HandlePlayerDisconnected(byte playerId)
+        {
+            if (!IsDraftActive || !AmongUsClient.Instance.AmHost) return;
+            var state = GetStateForPlayer(playerId);
+            if (state == null || state.HasPicked) return;
+
+            if (_activeSlots.Contains(state.SlotNumber))
+            {
+                DraftModePlugin.Logger.LogInfo($"[DraftManager] DC'd player was active picker â€” auto-picking");
+                AutoPickForState(state);
+                return;
+            }
+
+            DraftModePlugin.Logger.LogInfo($"[DraftManager] Marking DC'd player slot {state.SlotNumber} for auto-skip");
+            state.IsDisconnected = true;
+        }
+
         public static void Tick(float deltaTime)
         {
             // FIX: Added IsDraftActive guard so stale ticks after disconnect
@@ -407,10 +497,11 @@ namespace DraftModeTOUM.Managers
 
         // ---- Role offering ------------------------------------------------------
 
-        private static List<ushort> GetAvailableIds()
+        private static List<ushort> GetAvailableIds(HashSet<ushort> exclude = null)
         {
             return _pool.RoleIds.Where(id =>
             {
+                if (exclude != null && exclude.Contains(id)) return false;
                 if (GetDraftedCount(id) >= GetMaxCount(id)) return false;
                 var faction = GetFaction(id);
                 if (faction == RoleFaction.Impostor       && _impostorsDrafted      >= MaxImpostors)       return false;
@@ -425,35 +516,88 @@ namespace DraftModeTOUM.Managers
             return GetAvailableIds().Where(id => GetFaction(id) == faction).ToList();
         }
 
-        private static void OfferRolesToCurrentPicker()
+        
+        private static void StartRound()
         {
-            // FIX: Guard against calling this when draft is no longer active
             if (!IsDraftActive) return;
 
-            var state = GetCurrentPickerState();
-            if (state == null) return;
-
-            // Skip disconnected players immediately — auto-pick random for them
-            if (state.IsDisconnected)
+            if (_turnIndex >= TurnOrder.Count)
             {
-                DraftModePlugin.Logger.LogInfo($"[DraftManager] Skipping DC'd player slot {state.SlotNumber}");
-                FinalisePickForCurrentSlot(PickFullRandom());
+                FinishDraft();
                 return;
             }
 
-            state.IsPickingNow = true;
-            TurnTimerRunning   = false;
+            _roundOfferReserved.Clear();
+            _roundChosenRoles.Clear();
+            _roundReadyPickers.Clear();
+            _activeSlots = GetNextActiveSlots();
 
-            DraftModePlugin.Logger.LogInfo(
-                $"[DraftManager] Offering roles for slot {state.SlotNumber} (pid {state.PlayerId})");
+            if (_activeSlots.Count == 0)
+            {
+                FinishDraft();
+                return;
+            }
+
+            foreach (var s in _slotMap.Values)
+                if (!s.HasPicked) s.IsPickingNow = false;
+
+            CurrentTurn      = _turnIndex + 1;
+            TurnTimeLeft     = TurnDuration;
+            TurnTimerRunning = false;
+
+            var pending = new List<PlayerDraftState>();
+            _suppressAdvance = true;
+            foreach (var slot in _activeSlots)
+            {
+                var state = GetStateForSlot(slot);
+                if (state == null) continue;
+                state.IsPickingNow = true;
+
+                if (state.IsDisconnected)
+                {
+                    DraftModePlugin.Logger.LogInfo($"[DraftManager] Skipping DC'd player slot {state.SlotNumber}");
+                    AutoPickForState(state);
+                }
+                else
+                {
+                    pending.Add(state);
+                }
+            }
+            _suppressAdvance = false;
+
+            foreach (var state in pending)
+            {
+                DraftModePlugin.Logger.LogInfo(
+                    $"[DraftManager] Offering roles for slot {state.SlotNumber} (pid {state.PlayerId})");
+                var offered = BuildOfferForState(state, _roundOfferReserved);
+                state.OfferedRoleIds = offered;
+                DraftNetworkHelper.SendTurnAnnouncement(state.SlotNumber, state.PlayerId, offered, CurrentTurn);
+            }
+
+            DraftUiManager.RefreshTurnList();
+            AdvanceIfRoundComplete();
+        }
+
+        private static List<int> GetNextActiveSlots()
+        {
+            var result = new List<int>();
+            int idx = _turnIndex;
+            while (idx < TurnOrder.Count && result.Count < ConcurrentPickCount)
+            {
+                int slot = TurnOrder[idx];
+                var state = GetStateForSlot(slot);
+                if (state != null && !state.HasPicked)
+                    result.Add(slot);
+                idx++;
+            }
+            return result;
+        }
+
+        private static List<ushort> BuildOfferForState(PlayerDraftState state, HashSet<ushort> reserved)
+        {
+            int target = OfferedRolesCount;
+
             // ---- Forced card injection ------------------------------------------
-            // If admin pinned a role for this slot's player, inject it and auto-pick.
-            string forcedIdText = _forcedRoleId?.ToString() ?? "null";
-            LoggingSystem.Debug(
-                $"[DraftManager] OfferRoles: slot={state.SlotNumber} pid={state.PlayerId} " +
-                $"| forcedRoleId={forcedIdText} " +
-                $"forcedTarget={_forcedRoleTargetId} forcedName='{_forcedRoleName}'");
-
             if (_forcedRoleId.HasValue && state.PlayerId == _forcedRoleTargetId)
             {
                 ushort forcedId   = _forcedRoleId.Value;
@@ -465,7 +609,7 @@ namespace DraftModeTOUM.Managers
                 LoggingSystem.Debug(
                     $"[DraftManager] Injecting forced card '{forcedName}' for slot {state.SlotNumber}");
 
-                var available2 = GetAvailableIds();
+                var available2 = GetAvailableIds(reserved);
                 var offered2   = new List<ushort> { forcedId };
                 var fill       = available2.Where(id => id != forcedId).ToList();
                 offered2.AddRange(PickWeightedUnique(fill, Math.Max(0, OfferedRolesCount - 1)));
@@ -475,21 +619,20 @@ namespace DraftModeTOUM.Managers
                 offered2 = offered2.OrderBy(_ => UnityEngine.Random.value).ToList();
                 int forcedIndex = offered2.IndexOf(forcedId);
 
-                state.OfferedRoleIds = offered2;
-                DraftNetworkHelper.SendTurnAnnouncement(state.SlotNumber, state.PlayerId, offered2, CurrentTurn);
+                ReserveOffers(reserved, offered2);
 
                 Coroutines.Start(CoAutoPickForced(state.PlayerId, forcedIndex));
                 DraftDashboardReporter.TryConsumeForcedRole();
-                return;
+                return offered2;
             }
 
-            int target    = OfferedRolesCount;
-            var available = GetAvailableIds();
+            var available = GetAvailableIds(reserved);
             var offered   = new List<ushort>();
 
             if (state.GuaranteedFaction.HasValue && available.Count > 0)
             {
-                var bucketPool = GetAvailableForFaction(state.GuaranteedFaction.Value);
+                var bucketPool = GetAvailableForFaction(state.GuaranteedFaction.Value)
+                    .Where(id => !IsRoleReserved(id, reserved)).ToList();
                 if (bucketPool.Count > 0)
                 {
                     offered.AddRange(PickWeightedUnique(bucketPool, 1));
@@ -541,10 +684,21 @@ namespace DraftModeTOUM.Managers
                 while (offered.Count < target) offered.Add((ushort)RoleTypes.Crewmate);
             }
 
-            state.OfferedRoleIds = offered.OrderBy(_ => UnityEngine.Random.value).ToList();
-            DraftNetworkHelper.SendTurnAnnouncement(state.SlotNumber, state.PlayerId, state.OfferedRoleIds, CurrentTurn);
+            var finalOffered = offered.OrderBy(_ => UnityEngine.Random.value).ToList();
+            ReserveOffers(reserved, finalOffered);
+            return finalOffered;
         }
 
+        private static void ReserveOffers(HashSet<ushort> reserved, List<ushort> offered)
+        {
+            foreach (var id in offered)
+                if (IsUniqueRole(id)) reserved.Add(id);
+        }
+
+        private static bool IsUniqueRole(ushort id) => id != (ushort)RoleTypes.Crewmate;
+
+        private static bool IsRoleReserved(ushort id, HashSet<ushort> reserved) =>
+            reserved != null && IsUniqueRole(id) && reserved.Contains(id);
 
         private static IEnumerator CoAutoPickForced(byte playerId, int cardIndex)
         {
@@ -561,14 +715,15 @@ namespace DraftModeTOUM.Managers
         public static bool SubmitPick(byte playerId, int choiceIndex)
         {
             if (!AmongUsClient.Instance.AmHost || !IsDraftActive) return false;
-            var state = GetCurrentPickerState();
-            if (state == null || state.PlayerId != playerId || state.HasPicked) return false;
+            var state = GetStateForPlayer(playerId);
+            if (state == null || state.HasPicked) return false;
+            if (!_activeSlots.Contains(state.SlotNumber)) return false;
 
             ushort chosenId = (choiceIndex >= state.OfferedRoleIds.Count)
-                ? PickFullRandom()
+                ? PickFullRandomForState(state)
                 : state.OfferedRoleIds[choiceIndex];
 
-            FinalisePickForCurrentSlot(chosenId);
+            FinalisePickForState(state, chosenId);
             return true;
         }
 
@@ -577,29 +732,83 @@ namespace DraftModeTOUM.Managers
             // FIX: Guard — don't auto-pick if draft was cancelled while timer was running
             if (!IsDraftActive) return;
 
-            var state = GetCurrentPickerState();
-            if (!ShowRandomOption && state != null && state.OfferedRoleIds.Count > 0)
-                FinalisePickForCurrentSlot(
-                    state.OfferedRoleIds[UnityEngine.Random.Range(0, state.OfferedRoleIds.Count)]);
-            else
-                FinalisePickForCurrentSlot(PickFullRandom());
+            var pending = _activeSlots.Select(GetStateForSlot)
+                                     .Where(s => s != null && !s.HasPicked)
+                                     .ToList();
+            _suppressAdvance = true;
+            foreach (var state in pending)
+            {
+                ushort pick;
+                if (!ShowRandomOption && state.OfferedRoleIds.Count > 0)
+                {
+                    pick = state.OfferedRoleIds[UnityEngine.Random.Range(0, state.OfferedRoleIds.Count)];
+                }
+                else
+                {
+                    pick = PickFullRandomForState(state);
+                }
+                FinalisePickForState(state, pick);
+            }
+            _suppressAdvance = false;
+            AdvanceIfRoundComplete();
         }
 
-        private static ushort PickFullRandom()
+        private static ushort PickFullRandom(HashSet<ushort> exclude = null)
         {
-            var available = GetAvailableIds();
+            var available = GetAvailableIds(exclude);
             if (available.Count == 0) return (ushort)RoleTypes.Crewmate;
             return UseRoleChances ? PickWeighted(available) : available[UnityEngine.Random.Range(0, available.Count)];
         }
 
-        private static void FinalisePickForCurrentSlot(ushort roleId)
+        private static ushort PickFullRandomForState(PlayerDraftState state)
+        {
+            var exclude = new HashSet<ushort>(_roundChosenRoles);
+            foreach (var id in _roundOfferReserved)
+            {
+                if (!state.OfferedRoleIds.Contains(id)) exclude.Add(id);
+            }
+
+            var pick = PickFullRandom(exclude);
+            if (IsUniqueRole(pick) && exclude.Contains(pick))
+            {
+                pick = PickFullRandom(_roundChosenRoles);
+            }
+            return pick;
+        }
+
+        private static void AutoPickForState(PlayerDraftState state)
+        {
+            var pick = PickFullRandomForState(state);
+            FinalisePickForState(state, pick);
+        }
+
+        private static bool IsRoleAvailable(ushort roleId)
+        {
+            if (GetDraftedCount(roleId) >= GetMaxCount(roleId)) return false;
+            var faction = GetFaction(roleId);
+            if (faction == RoleFaction.Impostor       && _impostorsDrafted      >= MaxImpostors)       return false;
+            if (faction == RoleFaction.NeutralKilling && _neutralKillingsDrafted >= MaxNeutralKillings) return false;
+            if (faction == RoleFaction.Neutral        && _neutralPassivesDrafted >= MaxNeutralPassives) return false;
+            return true;
+        }
+
+        private static void FinalisePickForState(PlayerDraftState state, ushort roleId)
         {
             // FIX: Double-guard at the start of finalise to prevent processing
             // a pick that arrived after the draft was cancelled
-            if (!IsDraftActive) return;
+            if (!IsDraftActive || state == null) return;
 
-            var state = GetCurrentPickerState();
-            if (state == null) return;
+            if (IsUniqueRole(roleId) && _roundChosenRoles.Contains(roleId))
+            {
+                roleId = PickFullRandom(_roundChosenRoles);
+            }
+            if (!IsRoleAvailable(roleId))
+            {
+                roleId = PickFullRandom(_roundChosenRoles);
+            }
+
+            if (IsUniqueRole(roleId))
+                _roundChosenRoles.Add(roleId);
 
             state.ChosenRoleId = roleId;
             state.HasPicked    = true;
@@ -620,26 +829,50 @@ namespace DraftModeTOUM.Managers
                 $"NK={_neutralKillingsDrafted}/{MaxNeutralKillings}, " +
                 $"NP={_neutralPassivesDrafted}/{MaxNeutralPassives}");
 
-            CurrentTurn++;
             DraftUiManager.RefreshTurnList();
+            if (!_suppressAdvance)
+                AdvanceIfRoundComplete();
+        }
 
-            if (CurrentTurn > TurnOrder.Count)
+        private static void AdvanceIfRoundComplete()
+        {
+            if (_activeSlots.Count == 0) return;
+            foreach (var slot in _activeSlots)
             {
-                ApplyAllRoles();
-                IsDraftActive = false;
-                TurnTimerRunning = false; // FIX: ensure timer stops on draft completion
-                DraftUiManager.CloseAll();
-                DraftStatusOverlay.SetState(OverlayState.BackgroundOnly);
-                var recapEntries = BuildRecapEntries();
-                DraftNetworkHelper.BroadcastRecap(recapEntries, ShowRecap);
-                Reset(cancelledBeforeCompletion: false);
-                TriggerEndDraftSequence();
+                var s = GetStateForSlot(slot);
+                if (s != null && !s.HasPicked) return;
+            }
+
+            _turnIndex += _activeSlots.Count;
+            while (_turnIndex < TurnOrder.Count)
+            {
+                var s = GetStateForSlot(TurnOrder[_turnIndex]);
+                if (s == null || s.HasPicked) { _turnIndex++; continue; }
+                break;
+            }
+
+            if (_turnIndex >= TurnOrder.Count)
+            {
+                FinishDraft();
             }
             else
             {
                 TurnTimeLeft = TurnDuration;
-                OfferRolesToCurrentPicker();
+                StartRound();
             }
+        }
+
+        private static void FinishDraft()
+        {
+            ApplyAllRoles();
+            IsDraftActive = false;
+            TurnTimerRunning = false;
+            DraftUiManager.CloseAll();
+            DraftStatusOverlay.SetState(OverlayState.BackgroundOnly);
+            var recapEntries = BuildRecapEntries();
+            DraftNetworkHelper.BroadcastRecap(recapEntries, ShowRecap);
+            Reset(cancelledBeforeCompletion: false);
+            TriggerEndDraftSequence();
         }
 
         // ---- Recap --------------------------------------------------------------
@@ -788,6 +1021,7 @@ namespace DraftModeTOUM.Managers
             LockLobbyOnDraftStart = opts.LockLobbyOnDraftStart;
             UseRoleChances        = opts.UseRoleChances;
             OfferedRolesCount     = Mathf.Clamp(Mathf.RoundToInt(opts.OfferedRolesCount), 1, 9);
+            ConcurrentPickCount   = Mathf.Clamp(Mathf.RoundToInt(opts.ConcurrentPicks), 1, 5);
             ShowRandomOption      = opts.ShowRandomOption;
             MaxImpostors          = Mathf.Clamp(Mathf.RoundToInt(opts.MaxImpostors), 0, 10);
             MaxNeutralKillings    = Mathf.Clamp(Mathf.RoundToInt(opts.MaxNeutralKillings), 0, 10);
@@ -881,3 +1115,8 @@ namespace DraftModeTOUM.Managers
         }
     }
 }
+
+
+
+
+

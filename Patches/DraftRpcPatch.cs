@@ -110,11 +110,10 @@ namespace DraftModeTOUM.Patches
                         reader.ReadInt32(); reader.ReadUInt16(); // consume
                     }
                     return false;
-
                 case DraftRpc.PickerReady:
                     // Client signals their animation is done — host starts the turn timer
                     if (AmongUsClient.Instance.AmHost)
-                        DraftManager.StartTurnTimer();
+                        DraftManager.NotifyPickerReady(__instance.PlayerId);
                     return false;
 
                 case DraftRpc.ForceRole:
@@ -195,10 +194,17 @@ namespace DraftModeTOUM.Patches
 
         private static void DisplayTurnAnnouncement(int slot, byte pickerId, ushort[] roleIds)
         {
-            if (PlayerControl.LocalPlayer.PlayerId == pickerId)
+            byte localId = PlayerControl.LocalPlayer.PlayerId;
+            if (localId == pickerId)
+            {
                 DraftUiManager.ShowPicker(roleIds.ToList());
+            }
             else
-                DraftUiManager.CloseAll();
+            {
+                var localState = DraftManager.GetStateForPlayer(localId);
+                if (localState == null || !localState.IsPickingNow)
+                    DraftUiManager.CloseAll();
+            }
         }
     }
 
@@ -210,27 +216,10 @@ namespace DraftModeTOUM.Patches
             if (!AmongUsClient.Instance.AmHost) return;
             if (!DraftManager.IsDraftActive) return;
             if (data?.Character == null) return;
-
             byte dcPlayerId = data.Character.PlayerId;
             DraftModePlugin.Logger.LogInfo($"[DraftManager] Player {dcPlayerId} disconnected during draft");
 
-            // If it's the current picker's turn, auto-pick immediately for them
-            var picker = DraftManager.GetCurrentPickerState();
-            if (picker != null && picker.PlayerId == dcPlayerId)
-            {
-                DraftModePlugin.Logger.LogInfo($"[DraftManager] DC'd player was current picker — auto-picking");
-                DraftManager.SubmitPick(dcPlayerId, int.MaxValue); // MaxValue forces PickFullRandom
-                return;
-            }
-
-            // If a future slot belongs to the DC'd player, mark them as picked
-            // with a random role so their turn is skipped automatically when reached
-            var dcState = DraftManager.GetStateForPlayer(dcPlayerId);
-            if (dcState != null && !dcState.HasPicked)
-            {
-                DraftModePlugin.Logger.LogInfo($"[DraftManager] Marking DC'd player slot {dcState.SlotNumber} for auto-skip");
-                dcState.IsDisconnected = true;
-            }
+            DraftManager.HandlePlayerDisconnected(dcPlayerId);
         }
     }
 
@@ -322,7 +311,7 @@ namespace DraftModeTOUM.Patches
             if (AmongUsClient.Instance.AmHost)
             {
                 // Host is the picker — start timer directly
-                DraftManager.StartTurnTimer();
+                DraftManager.NotifyPickerReady(PlayerControl.LocalPlayer.PlayerId);
             }
             else
             {
@@ -400,3 +389,13 @@ namespace DraftModeTOUM.Patches
         }
     }
 }
+
+
+
+
+
+
+
+
+
+

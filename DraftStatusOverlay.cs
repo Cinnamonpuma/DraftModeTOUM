@@ -31,6 +31,7 @@ namespace DraftModeTOUM
         private ushort?      _shownRoleId       = null;
         private int          _cachedMySlot      = -1;
         private int          _cachedPickerSlot  = -1;
+        private int          _cachedPickerCount = -1;
         private OverlayState _currentState      = OverlayState.Hidden;
 
         private List<GameObject> _hiddenHudChildren = new();
@@ -94,6 +95,7 @@ namespace DraftModeTOUM
             _instance._shownRoleId      = null;
             _instance._cachedMySlot     = -1;
             _instance._cachedPickerSlot = -1;
+            _instance._cachedPickerCount = -1;
         }
 
         // ── Unity lifecycle ───────────────────────────────────────────────────────
@@ -376,13 +378,20 @@ namespace DraftModeTOUM
                 if (DraftManager.IsDraftActive)
                 {
                     int mySlot     = DraftManager.GetSlotForPlayer(PlayerControl.LocalPlayer.PlayerId);
-                    var picker     = DraftManager.GetCurrentPickerState();
-                    int pickerSlot = picker?.SlotNumber ?? -1;
+                    int pickerSlot = -1;
+                    int pickerCount = 0;
+                    foreach (var s in DraftManager.GetActivePickerStates())
+                    {
+                        if (s == null || !s.IsPickingNow) continue;
+                        pickerCount++;
+                        if (pickerSlot < 0) pickerSlot = s.SlotNumber;
+                    }
 
-                    if (mySlot != _cachedMySlot || pickerSlot != _cachedPickerSlot)
+                    if (mySlot != _cachedMySlot || pickerSlot != _cachedPickerSlot || pickerCount != _cachedPickerCount)
                     {
                         _cachedMySlot     = mySlot;
                         _cachedPickerSlot = pickerSlot;
+                        _cachedPickerCount = pickerCount;
                         UpdateContent();
                     }
                 }
@@ -401,19 +410,25 @@ namespace DraftModeTOUM
             if (_root == null) return;
 
             int mySlot     = DraftManager.GetSlotForPlayer(PlayerControl.LocalPlayer.PlayerId);
-            var picker     = DraftManager.GetCurrentPickerState();
-            int pickerSlot = picker?.SlotNumber ?? -1;
+            int pickerSlot  = -1;
+            int pickerCount = 0;
+            bool isMyTurn   = false;
+            foreach (var s in DraftManager.GetActivePickerStates())
+            {
+                if (s == null || !s.IsPickingNow) continue;
+                pickerCount++;
+                if (pickerSlot < 0) pickerSlot = s.SlotNumber;
+                if (s.PlayerId == PlayerControl.LocalPlayer.PlayerId) isMyTurn = true;
+            }
 
             if (_yourNumberValue != null)
                 _yourNumberValue.text = mySlot > 0 ? mySlot.ToString() : "?";
             if (_nowPickingValue != null)
-                _nowPickingValue.text = pickerSlot > 0 ? pickerSlot.ToString() : "?";
-
-            bool isMyTurn = mySlot > 0 && mySlot == pickerSlot;
+                _nowPickingValue.text = pickerCount > 1 ? "MULTI" : (pickerSlot > 0 ? pickerSlot.ToString() : "?");
             if (_nowPickingValue != null)
                 _nowPickingValue.color = isMyTurn ? new Color(0.1f, 1f, 0.4f) : new Color(1f, 0.85f, 0.1f);
             if (_nowPickingLabel != null)
-                _nowPickingLabel.text  = isMyTurn ? "YOUR TURN!" : "NOW PICKING:";
+                _nowPickingLabel.text  = isMyTurn ? "YOUR TURN!" : (pickerCount > 1 ? "NOW PICKING (MULTI):" : "NOW PICKING:");
         }
 
         private void UpdateVisibility()
