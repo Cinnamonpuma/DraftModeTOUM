@@ -24,10 +24,7 @@ namespace DraftModeTOUM
         private const string PrefabName = "SelectRoleGame";
         private const float TeamNameFontSize = 3.8f;
 
-        // ── Scale / spacing tuned per card count ─────────────────────────────────
-        // The prefab card is 4x6 units at scale 0.55. TOU stacks ~3 cards with
-        // -0.5 spacing. Draft can show up to 9 so we scale down and spread more.
-         // The prefab card is 4x6 units at scale 0.55. TOU stacks ~3 cards with
+
        private static float CardScaleForCount(int count) => count switch
         {
             <= 3 => 0.55f,
