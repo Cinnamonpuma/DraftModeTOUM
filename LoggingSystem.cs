@@ -23,9 +23,7 @@ namespace DraftModeTOUM
             _logger = logger;
         }
 
-        /// <summary>
-        /// Log debug messages (compiled out if ENABLE_DEBUG is false)
-        /// </summary>
+
         public static void Debug(string message)
         {
 #if ENABLE_DEBUG
