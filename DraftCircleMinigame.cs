@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using Il2CppInterop.Runtime.Attributes;
@@ -13,7 +13,7 @@ using DraftModeTOUM.Managers;
 
 namespace DraftModeTOUM;
 
-// Circle-style draft UI — roles arranged in a spinning wheel
+
 public sealed class DraftCircleMinigame : Minigame
 {
     public Transform? RolesHolder;
@@ -25,6 +25,12 @@ public sealed class DraftCircleMinigame : Minigame
     public GameObject? RedRing;
     public GameObject? WarpRing;
     public TextMeshPro? TurnListText;
+
+    private GameObject? _statusGo;
+    private GameObject? _roleNameGo;
+    private GameObject? _roleTeamGo;
+    private GameObject? _roleIconGo;
+    private GameObject? _turnListGo;
 
     public static int CurrentCard { get; set; }
     public static int RoleCount { get; set; }
@@ -46,10 +52,17 @@ public sealed class DraftCircleMinigame : Minigame
         RolePrefab = transform.FindChild("RoleCardHolder").gameObject;
 
         var status = transform.FindChild("Status");
+        _statusGo = status.gameObject;
+        var roleNameTr = status.FindChild("RoleName");
+        var roleTeamTr = status.FindChild("RoleTeam");
+        var roleImageTr = status.FindChild("RoleImage");
+        _roleNameGo = roleNameTr.gameObject;
+        _roleTeamGo = roleTeamTr.gameObject;
+        _roleIconGo = roleImageTr.gameObject;
         StatusText = status.GetComponent<TextMeshPro>();
-        RoleName = status.FindChild("RoleName").GetComponent<TextMeshPro>();
-        RoleTeam = status.FindChild("RoleTeam").GetComponent<TextMeshPro>();
-        RoleIcon = status.FindChild("RoleImage").GetComponent<SpriteRenderer>();
+        RoleName = roleNameTr.GetComponent<TextMeshPro>();
+        RoleTeam = roleTeamTr.GetComponent<TextMeshPro>();
+        RoleIcon = roleImageTr.GetComponent<SpriteRenderer>();
         RedRing = status.FindChild("RoleRing").gameObject;
         WarpRing = status.FindChild("RingWarp").gameObject;
 
@@ -58,16 +71,16 @@ public sealed class DraftCircleMinigame : Minigame
 
         StatusText.font = font; StatusText.fontMaterial = fontMat;
         StatusText.text = "Draft Pick";
-        StatusText.transform.gameObject.SetActive(false);
+        _statusGo.SetActive(false);
 
         RoleName.font = font; RoleName.fontMaterial = fontMat;
-        RoleName.text = " "; RoleName.transform.gameObject.SetActive(false);
+        RoleName.text = " "; _roleNameGo.SetActive(false);
 
         RoleTeam.font = font; RoleTeam.fontMaterial = fontMat;
-        RoleTeam.text = " "; RoleTeam.transform.gameObject.SetActive(false);
+        RoleTeam.text = " "; _roleTeamGo.SetActive(false);
 
         RoleIcon.sprite = TouRoleIcons.RandomAny.LoadAsset();
-        RoleIcon.transform.gameObject.SetActive(false);
+        _roleIconGo.SetActive(false);
         RedRing.SetActive(false);
         WarpRing.SetActive(false);
 
@@ -75,7 +88,8 @@ public sealed class DraftCircleMinigame : Minigame
         listGo.transform.SetParent(transform, false);
         listGo.transform.localPosition = new Vector3(-4.2f, 1.8f, -1f);
 
-        TurnListText = listGo.AddComponent<TextMeshPro>();
+        _turnListGo = listGo;
+        TurnListText = listGo.AddComponent(Il2CppInterop.Runtime.Il2CppType.Of<TextMeshPro>()).Cast<TextMeshPro>();
         TurnListText.font = font;
         TurnListText.fontMaterial = fontMat;
         TurnListText.fontSize = 1.5f;
@@ -121,11 +135,11 @@ public sealed class DraftCircleMinigame : Minigame
     public override void Close()
     {
         _hasPicked = true;
-        _onPick = null;  // prevent any late callback firing
+        _onPick = null;  
         CurrentCard = -1;
         RoleCount = -1;
 
-        // Clear the full-screen overlay immediately
+        
         try
         {
             if (HudManager.Instance?.FullScreen != null)
@@ -136,9 +150,9 @@ public sealed class DraftCircleMinigame : Minigame
         }
         catch { }
 
-        // Hide immediately then DestroyImmediate so there is no deferred-destroy
-        // window where the GO is still alive but _circleMinigame is already null.
-        // This was causing the circle to stay visible on the last pick.
+        
+        
+        
         try
         {
             gameObject.SetActive(false);
@@ -146,7 +160,7 @@ public sealed class DraftCircleMinigame : Minigame
         }
         catch
         {
-            // Fall back to deferred destroy if DestroyImmediate throws
+            
             try { UnityEngine.Object.Destroy(gameObject); } catch { }
         }
     }
@@ -186,14 +200,14 @@ public sealed class DraftCircleMinigame : Minigame
         DraftModePlugin.Logger.LogInfo("[DraftCircleMinigame] Begin() called.");
         HudManager.Instance.StartCoroutine(HudManager.Instance.CoFadeFullScreen(Color.clear, _bgColor));
 
-        StatusText!.transform.gameObject.SetActive(true);
-        RoleName!.transform.gameObject.SetActive(true);
-        RoleTeam!.transform.gameObject.SetActive(true);
-        RoleIcon!.transform.gameObject.SetActive(true);
+        _statusGo!.SetActive(true);
+        _roleNameGo!.SetActive(true);
+        _roleTeamGo!.SetActive(true);
+        _roleIconGo!.SetActive(true);
         RedRing!.SetActive(true);
         WarpRing!.SetActive(true);
-        RoleIcon.transform.localScale = Vector3.one * 0.35f;
-        TurnListText!.transform.gameObject.SetActive(true);
+        RoleIcon!.transform.localScale = Vector3.one * 0.35f;
+        _turnListGo!.SetActive(true);
         RefreshTurnList();
 
         if (_cards != null)
@@ -208,7 +222,7 @@ public sealed class DraftCircleMinigame : Minigame
                     if (_hasPicked) return;
                     _hasPicked = true;
                     var cb = _onPick;
-                    _onPick = null;  // prevent any second invocation
+                    _onPick = null;  
                     cb?.Invoke(capturedIndex);
                 }));
             }
@@ -298,3 +312,4 @@ public sealed class DraftCircleMinigame : Minigame
         return 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f);
     }
 }
+

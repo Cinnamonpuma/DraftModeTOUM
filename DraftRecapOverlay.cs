@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using TMPro;
 using System.Collections.Generic;
 using DraftModeTOUM.Managers;
@@ -30,7 +30,7 @@ namespace DraftModeTOUM
             Hide();
             var go = new GameObject("DraftRecapOverlay");
 
-            // Attach directly to the HUD so it layers correctly
+            
             if (HudManager.Instance != null)
             {
                 go.transform.SetParent(HudManager.Instance.transform, false);
@@ -47,14 +47,14 @@ namespace DraftModeTOUM
 
         public static void Hide()
         {
-            // 1. Destroy the main instance
+            
             if (_instance != null)
             {
                 try
                 {
                     if (_instance.gameObject != null)
                     {
-                        _instance.gameObject.SetActive(false); // Instantly vanish visually
+                        _instance.gameObject.SetActive(false); 
                         Destroy(_instance.gameObject);
                     }
                 }
@@ -62,7 +62,7 @@ namespace DraftModeTOUM
                 _instance = null;
             }
 
-            // 2. Aggressive fallback: seek and destroy
+            
             var leftover = GameObject.Find("DraftRecapOverlay");
             if (leftover != null)
             {
@@ -70,7 +70,7 @@ namespace DraftModeTOUM
                 Destroy(leftover);
             }
 
-            // 3. Clean up the orphaned root from the previous buggy code if it's stuck in memory
+            
             var oldRoot = GameObject.Find("RecapRoot");
             if (oldRoot != null)
             {
@@ -86,7 +86,7 @@ namespace DraftModeTOUM
             var font = HudManager.Instance.TaskPanel.taskText.font;
             var fontMat = HudManager.Instance.TaskPanel.taskText.fontMaterial;
 
-            // Notice we parent directly to "gameObject" now, not a separate root!
+            
             var title = MakeText(gameObject, "Title", font, fontMat, 2.5f, new Vector3(0, 2.4f, 0));
             title.text = "<color=#FFD700><b>── DRAFT RECAP ──</b></color>";
 
@@ -122,7 +122,7 @@ namespace DraftModeTOUM
             go.transform.SetParent(parent.transform, false);
             go.transform.localPosition = pos;
 
-            var tmp = go.AddComponent<TextMeshPro>();
+            var tmp = go.AddComponent(Il2CppInterop.Runtime.Il2CppType.Of<TextMeshPro>()).Cast<TextMeshPro>();
             tmp.font = font;
             tmp.fontMaterial = fontMat;
             tmp.fontSize = size;
@@ -139,3 +139,4 @@ namespace DraftModeTOUM
         }
     }
 }
+

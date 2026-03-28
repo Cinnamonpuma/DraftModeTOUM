@@ -1,4 +1,4 @@
-using DraftModeTOUM.Managers;
+﻿using DraftModeTOUM.Managers;
 using HarmonyLib;
 using Hazel;
 using System.Collections.Generic;
@@ -13,9 +13,11 @@ namespace DraftModeTOUM.Patches
         StartDraft   = 223,
         Recap        = 224,
         SlotNotify   = 225,
-        PickerReady    = 226,
-        PickConfirmed  = 227,
-        ForceRole      = 228
+        PickerReady  = 226,
+        PickConfirmed = 227,
+        ForceRole    = 228,
+        CancelDraft  = 229,
+        EndDraft     = 230
     }
 
     [HarmonyPatch(typeof(PlayerControl), nameof(PlayerControl.HandleRpc))]
@@ -51,7 +53,7 @@ namespace DraftModeTOUM.Patches
                             for (int i = 0; i < count; i++)
                             {
                                 int    slot = reader.ReadInt32();
-                                string role = reader.ReadString(); // recap uses NiceName resolved on host
+                                string role = reader.ReadString(); 
                                 entries.Add(new RecapEntry(slot, role));
                             }
                             DraftRecapOverlay.Show(entries);
@@ -98,29 +100,46 @@ namespace DraftModeTOUM.Patches
                         {
                             state.ChosenRoleId = roleId;
                             state.HasPicked    = true;
+                            
+                            if (state.PlayerId == PlayerControl.LocalPlayer.PlayerId)
+                                DraftStatusOverlay.NotifyLocalPlayerPicked(roleId);
                         }
                     }
                     else
                     {
-                        reader.ReadInt32(); reader.ReadUInt16(); // consume
+                        reader.ReadInt32(); reader.ReadUInt16(); 
                     }
                     return false;
-
                 case DraftRpc.PickerReady:
-                    // Client signals their animation is done — host starts the turn timer
+                    
                     if (AmongUsClient.Instance.AmHost)
-                        DraftManager.StartTurnTimer();
+                        DraftManager.NotifyPickerReady(__instance.PlayerId);
                     return false;
 
                 case DraftRpc.ForceRole:
-                    // Non-host client relays their forced role to the host
+                    
                     if (AmongUsClient.Instance.AmHost)
                     {
                         string roleName = reader.ReadString();
                         byte targetId   = reader.ReadByte();
                         DraftManager.SetForcedDraftRole(roleName, targetId);
-                        DraftModePlugin.Logger.LogInfo($"[DraftRpcPatch] Host received ForceRole '{roleName}' for player {targetId}");
+                        LoggingSystem.Debug($"[DraftRpcPatch] Host received ForceRole '{roleName}' for player {targetId}");
                     }
+                    return false;
+
+                case DraftRpc.CancelDraft:
+                    
+                    if (!AmongUsClient.Instance.AmHost)
+                    {
+                        DraftUiManager.CloseAll();
+                        DraftStatusOverlay.SetState(OverlayState.Hidden);
+                        DraftManager.Reset(cancelledBeforeCompletion: true);
+                    }
+                    return false;
+                case DraftRpc.EndDraft:
+                    
+                    DraftManager.Reset(cancelledBeforeCompletion: true);
+                    DraftManager.SendChatLocal("<color=#FFD700>Draft has been cancelled by the host.</color>");
                     return false;
 
                 default:
@@ -137,11 +156,11 @@ namespace DraftModeTOUM.Patches
 
         private static void ConsumeAnnounceTurnPacket(MessageReader reader)
         {
-            reader.ReadInt32(); // turnNumber
-            reader.ReadInt32(); // slot
-            reader.ReadByte();  // pickerId
+            reader.ReadInt32(); 
+            reader.ReadInt32(); 
+            reader.ReadByte();  
             int roleCount = reader.ReadInt32();
-            for (int i = 0; i < roleCount; i++) reader.ReadUInt16(); // role IDs
+            for (int i = 0; i < roleCount; i++) reader.ReadUInt16(); 
         }
 
         private static void HandleStartDraft(MessageReader reader)
@@ -175,10 +194,32 @@ namespace DraftModeTOUM.Patches
 
         private static void DisplayTurnAnnouncement(int slot, byte pickerId, ushort[] roleIds)
         {
-            if (PlayerControl.LocalPlayer.PlayerId == pickerId)
+            byte localId = PlayerControl.LocalPlayer.PlayerId;
+            if (localId == pickerId)
+            {
                 DraftUiManager.ShowPicker(roleIds.ToList());
+            }
             else
-                DraftUiManager.CloseAll();
+            {
+                var localState = DraftManager.GetStateForPlayer(localId);
+                if (localState == null || !localState.IsPickingNow)
+                    DraftUiManager.CloseAll();
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(AmongUsClient), nameof(AmongUsClient.OnPlayerLeft))]
+    public static class PlayerLeftDraftPatch
+    {
+        public static void Postfix(AmongUsClient __instance, InnerNet.ClientData data)
+        {
+            if (!AmongUsClient.Instance.AmHost) return;
+            if (!DraftManager.IsDraftActive) return;
+            if (data?.Character == null) return;
+            byte dcPlayerId = data.Character.PlayerId;
+            DraftModePlugin.Logger.LogInfo($"[DraftManager] Player {dcPlayerId} disconnected during draft");
+
+            DraftManager.HandlePlayerDisconnected(dcPlayerId);
         }
     }
 
@@ -228,7 +269,7 @@ namespace DraftModeTOUM.Patches
             writer.Write(slot);
             writer.Write(playerId);
             writer.Write(roleIds.Count);
-            foreach (var id in roleIds) writer.Write(id);  // ushort, not string
+            foreach (var id in roleIds) writer.Write(id);  
             AmongUsClient.Instance.FinishRpcImmediately(writer);
         }
 
@@ -245,9 +286,16 @@ namespace DraftModeTOUM.Patches
 
         public static void BroadcastPickConfirmed(int slot, ushort roleId)
         {
-            // Update host state directly
+            
             var state = DraftManager.GetStateForSlot(slot);
-            if (state != null) { state.ChosenRoleId = roleId; state.HasPicked = true; }
+            if (state != null)
+            {
+                state.ChosenRoleId = roleId;
+                state.HasPicked    = true;
+                
+                if (state.PlayerId == PlayerControl.LocalPlayer.PlayerId)
+                    DraftStatusOverlay.NotifyLocalPlayerPicked(roleId);
+            }
 
             var writer = AmongUsClient.Instance.StartRpcImmediately(
                 PlayerControl.LocalPlayer.NetId,
@@ -262,8 +310,8 @@ namespace DraftModeTOUM.Patches
         {
             if (AmongUsClient.Instance.AmHost)
             {
-                // Host is the picker — start timer directly
-                DraftManager.StartTurnTimer();
+                
+                DraftManager.NotifyPickerReady(PlayerControl.LocalPlayer.PlayerId);
             }
             else
             {
@@ -276,11 +324,11 @@ namespace DraftModeTOUM.Patches
             }
         }
 
-        /// <summary>
-        /// Called by a non-host client when their heartbeat returns a forcedRole.
-        /// Sends the role name + their own player ID to the host so the host can inject it.
-        /// If we ARE the host, just call DraftManager directly.
-        /// </summary>
+        
+        
+        
+        
+        
         public static void SendForceRoleToHost(string roleName)
         {
             byte myId = PlayerControl.LocalPlayer.PlayerId;
@@ -301,6 +349,15 @@ namespace DraftModeTOUM.Patches
             }
         }
 
+        public static void BroadcastCancelDraft()
+        {
+            var writer = AmongUsClient.Instance.StartRpcImmediately(
+                PlayerControl.LocalPlayer.NetId,
+                (byte)DraftRpc.CancelDraft,
+                Hazel.SendOption.Reliable, -1);
+            AmongUsClient.Instance.FinishRpcImmediately(writer);
+        }
+
         public static void BroadcastRecap(List<RecapEntry> entries, bool showRecap)
         {
             if (showRecap) DraftRecapOverlay.Show(entries);
@@ -316,5 +373,30 @@ namespace DraftModeTOUM.Patches
             }
             AmongUsClient.Instance.FinishRpcImmediately(writer);
         }
+
+        public static void BroadcastDraftEnd()
+        {
+            
+            DraftManager.Reset(cancelledBeforeCompletion: true);
+            DraftManager.SendChatLocal("<color=#FFD700>Draft has been cancelled by the host.</color>");
+
+            
+            var writer = AmongUsClient.Instance.StartRpcImmediately(
+                PlayerControl.LocalPlayer.NetId,
+                (byte)DraftRpc.EndDraft,
+                Hazel.SendOption.Reliable, -1);
+            AmongUsClient.Instance.FinishRpcImmediately(writer);
+        }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
