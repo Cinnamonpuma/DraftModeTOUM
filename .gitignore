@@ -2,3 +2,4 @@
 bin/
 obj/
 DraftModeTOUM.csproj
+Patches/ForceRoleCommand.cs
