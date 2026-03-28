@@ -641,60 +641,62 @@ namespace DraftModeTOUM.Managers
             var available = GetAvailableIds(reserved);
             var offered   = new List<ushort>();
 
-            if (state.GuaranteedFaction.HasValue && available.Count > 0)
+            if (available.Count > 0)
             {
-                var bucketPool = GetAvailableForFaction(state.GuaranteedFaction.Value)
-                    .Where(id => !IsRoleReserved(id, reserved)).ToList();
-                if (bucketPool.Count > 0)
-                {
-                    offered.AddRange(PickWeightedUnique(bucketPool, 1));
-                    LoggingSystem.Debug(
-                        $"[DraftManager] Slot {state.SlotNumber} guaranteed " +
-                        $"{state.GuaranteedFaction.Value} card: {(RoleTypes)offered[0]}");
-                }
-                else
-                {
-                    LoggingSystem.Debug(
-                        $"[DraftManager] Slot {state.SlotNumber} guaranteed faction " +
-                        $"{state.GuaranteedFaction.Value} is exhausted, filling with available");
-                }
-            }
+                var nonCrew = available.Where(id => GetFaction(id) != RoleFaction.Crewmate).ToList();
+                var crew    = available.Where(id => GetFaction(id) == RoleFaction.Crewmate).ToList();
 
-            int remaining = target - offered.Count;
+                int slotIndex = Math.Max(0, TurnOrder.IndexOf(state.SlotNumber));
+                int totalSlots = Math.Max(1, TurnOrder.Count);
+                float t = totalSlots == 1 ? 0f : (float)slotIndex / (totalSlots - 1f);
+                float bias = 1f - t;
 
-            if (remaining > 0 && available.Count > 0)
-            {
-                var fillPool  = available.Where(id => !offered.Contains(id)).ToList();
-                if (fillPool.Count == 0)
+                int maxEvil = Math.Min(nonCrew.Count, target >= 4 ? 4 : target);
+                int minEvil = nonCrew.Count > 0 ? 1 : 0;
+
+                int evilCount = minEvil;
+                int extraMax = Math.Max(0, maxEvil - minEvil);
+                for (int i = 0; i < extraMax; i++)
                 {
-                    while (offered.Count < target) offered.Add((ushort)RoleTypes.Crewmate);
+                    float chance = 0.25f + 0.55f * bias;
+                    if (UnityEngine.Random.value < chance)
+                        evilCount++;
                 }
-                else
-                {
-                    var crewFill  = fillPool.Where(id => GetFaction(id) == RoleFaction.Crewmate).ToList();
-                    var otherFill = fillPool.Where(id => GetFaction(id) != RoleFaction.Crewmate).ToList();
+                evilCount = Math.Min(evilCount, maxEvil);
 
-                    if (!state.GuaranteedFaction.HasValue && otherFill.Count > 0 && remaining >= 2)
+                if (state.GuaranteedFaction.HasValue && nonCrew.Count > 0)
+                {
+                    var bucketPool = GetAvailableForFaction(state.GuaranteedFaction.Value)
+                        .Where(id => !IsRoleReserved(id, reserved)).ToList();
+                    if (bucketPool.Count > 0)
                     {
-                        offered.AddRange(PickWeightedUnique(otherFill, 1));
-                        remaining--;
+                        offered.AddRange(PickWeightedUnique(bucketPool, 1));
+                        evilCount = Math.Max(0, evilCount - 1);
                     }
+                }
 
-                    if (crewFill.Count > 0) offered.AddRange(PickWeightedUnique(crewFill, remaining));
+                if (evilCount > 0)
+                {
+                    var evilPool = nonCrew.Where(id => !offered.Contains(id)).ToList();
+                    offered.AddRange(PickWeightedUnique(evilPool, Math.Min(evilCount, evilPool.Count)));
+                }
 
-                    if (offered.Count < target)
-                    {
-                        var topUp = available.Where(id => !offered.Contains(id)).ToList();
-                        offered.AddRange(PickWeightedUnique(topUp, target - offered.Count));
-                    }
+                int remaining = target - offered.Count;
+                if (remaining > 0)
+                {
+                    var crewPool = crew.Where(id => !offered.Contains(id)).ToList();
+                    offered.AddRange(PickWeightedUnique(crewPool, Math.Min(remaining, crewPool.Count)));
+                }
 
-                    while (offered.Count < target) offered.Add((ushort)RoleTypes.Crewmate);
+                while (offered.Count < target)
+                {
+                    var topUp = available.Where(id => !offered.Contains(id)).ToList();
+                    if (topUp.Count == 0) break;
+                    offered.AddRange(PickWeightedUnique(topUp, 1));
                 }
             }
-            else if (available.Count == 0)
-            {
-                while (offered.Count < target) offered.Add((ushort)RoleTypes.Crewmate);
-            }
+
+            while (offered.Count < target) offered.Add((ushort)RoleTypes.Crewmate);
 
             var finalOffered = offered.OrderBy(_ => UnityEngine.Random.value).ToList();
             ReserveOffers(reserved, finalOffered);
