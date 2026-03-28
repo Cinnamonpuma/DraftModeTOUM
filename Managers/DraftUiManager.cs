@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using AmongUs.GameOptions;
@@ -12,11 +12,11 @@ using UnityEngine;
 
 namespace DraftModeTOUM.Managers
 {
-    /// <summary>
-    /// Manages the lifetime of every draft-related UI panel so they can all
-    /// be closed in one call (e.g. on disconnect or game-start).
-    /// Also exposes helpers used by DraftRpcPatch and DraftSelectionMinigame.
-    /// </summary>
+    
+    
+    
+    
+    
     public static class DraftUiManager
     {
         private static DraftCircleMinigame? _circleMinigame;
@@ -33,12 +33,12 @@ namespace DraftModeTOUM.Managers
             }
         }
 
-        // ── Entry points ─────────────────────────────────────────────────────────
+        
 
-        /// <summary>
-        /// Called on the client whose turn it is. roleIds come from the host
-        /// but are resolved locally — the host's name/rename never reaches the UI.
-        /// </summary>
+        
+        
+        
+        
         public static void ShowPicker(List<ushort> roleIds)
         {
             if (HudManager.Instance == null || roleIds == null || roleIds.Count == 0) return;
@@ -90,13 +90,13 @@ namespace DraftModeTOUM.Managers
                 DraftStatusOverlay.SetState(OverlayState.Waiting);
         }
 
-        // ── Card building ────────────────────────────────────────────────────────
+        
 
-        /// <summary>
-        /// Builds DraftRoleCard list from role IDs sent by the host.
-        /// Every piece of display data (name, team, icon, color) is resolved
-        /// entirely from the client's local RoleManager — the host string never appears.
-        /// </summary>
+        
+        
+        
+        
+        
         public static List<DraftRoleCard> BuildCards(List<ushort> roleIds)
         {
             var cards = new List<DraftRoleCard>();
@@ -105,7 +105,7 @@ namespace DraftModeTOUM.Managers
                 ushort id   = roleIds[i];
                 var    role = ResolveRole(id);
 
-                // Everything resolved locally — host rename has zero effect
+                
                 string displayName = role?.NiceName          ?? $"Role {id}";
                 string team        = GetTeamLabel(role)       ?? "Unknown";
                 Sprite icon        = GetRoleIcon(role);
@@ -124,7 +124,7 @@ namespace DraftModeTOUM.Managers
             return cards;
         }
 
-        // ── Role resolution ──────────────────────────────────────────────────────
+        
 
         public static RoleBehaviour? ResolveRole(ushort roleId)
         {
@@ -162,7 +162,7 @@ namespace DraftModeTOUM.Managers
             return Color.white;
         }
 
-        // ── Circle UI ────────────────────────────────────────────────────────────
+        
 
         private static void ShowCircle(List<ushort> roleIds)
         {
@@ -197,9 +197,10 @@ namespace DraftModeTOUM.Managers
             DraftNetworkHelper.SendPickToHost(index);
         }
 
-        // ── Utility ───────────────────────────────────────────────────────────────
+        
 
         public static string Normalize(string s) =>
             (s ?? string.Empty).Replace(" ", "").Replace("-", "");
     }
 }
+

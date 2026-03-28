@@ -1,4 +1,4 @@
-using DraftModeTOUM.Managers;
+﻿using DraftModeTOUM.Managers;
 using HarmonyLib;
 using Hazel;
 using System.Collections.Generic;
@@ -53,7 +53,7 @@ namespace DraftModeTOUM.Patches
                             for (int i = 0; i < count; i++)
                             {
                                 int    slot = reader.ReadInt32();
-                                string role = reader.ReadString(); // recap uses NiceName resolved on host
+                                string role = reader.ReadString(); 
                                 entries.Add(new RecapEntry(slot, role));
                             }
                             DraftRecapOverlay.Show(entries);
@@ -100,24 +100,24 @@ namespace DraftModeTOUM.Patches
                         {
                             state.ChosenRoleId = roleId;
                             state.HasPicked    = true;
-                            // If this is our own pick, show the role card
+                            
                             if (state.PlayerId == PlayerControl.LocalPlayer.PlayerId)
                                 DraftStatusOverlay.NotifyLocalPlayerPicked(roleId);
                         }
                     }
                     else
                     {
-                        reader.ReadInt32(); reader.ReadUInt16(); // consume
+                        reader.ReadInt32(); reader.ReadUInt16(); 
                     }
                     return false;
                 case DraftRpc.PickerReady:
-                    // Client signals their animation is done — host starts the turn timer
+                    
                     if (AmongUsClient.Instance.AmHost)
                         DraftManager.NotifyPickerReady(__instance.PlayerId);
                     return false;
 
                 case DraftRpc.ForceRole:
-                    // Non-host client relays their forced role to the host
+                    
                     if (AmongUsClient.Instance.AmHost)
                     {
                         string roleName = reader.ReadString();
@@ -128,7 +128,7 @@ namespace DraftModeTOUM.Patches
                     return false;
 
                 case DraftRpc.CancelDraft:
-                    // Clients hide all UI and reset state when host cancels
+                    
                     if (!AmongUsClient.Instance.AmHost)
                     {
                         DraftUiManager.CloseAll();
@@ -137,7 +137,7 @@ namespace DraftModeTOUM.Patches
                     }
                     return false;
                 case DraftRpc.EndDraft:
-                    // Host broadcasts draft end to all clients
+                    
                     DraftManager.Reset(cancelledBeforeCompletion: true);
                     DraftManager.SendChatLocal("<color=#FFD700>Draft has been cancelled by the host.</color>");
                     return false;
@@ -156,11 +156,11 @@ namespace DraftModeTOUM.Patches
 
         private static void ConsumeAnnounceTurnPacket(MessageReader reader)
         {
-            reader.ReadInt32(); // turnNumber
-            reader.ReadInt32(); // slot
-            reader.ReadByte();  // pickerId
+            reader.ReadInt32(); 
+            reader.ReadInt32(); 
+            reader.ReadByte();  
             int roleCount = reader.ReadInt32();
-            for (int i = 0; i < roleCount; i++) reader.ReadUInt16(); // role IDs
+            for (int i = 0; i < roleCount; i++) reader.ReadUInt16(); 
         }
 
         private static void HandleStartDraft(MessageReader reader)
@@ -269,7 +269,7 @@ namespace DraftModeTOUM.Patches
             writer.Write(slot);
             writer.Write(playerId);
             writer.Write(roleIds.Count);
-            foreach (var id in roleIds) writer.Write(id);  // ushort, not string
+            foreach (var id in roleIds) writer.Write(id);  
             AmongUsClient.Instance.FinishRpcImmediately(writer);
         }
 
@@ -286,13 +286,13 @@ namespace DraftModeTOUM.Patches
 
         public static void BroadcastPickConfirmed(int slot, ushort roleId)
         {
-            // Update host state directly
+            
             var state = DraftManager.GetStateForSlot(slot);
             if (state != null)
             {
                 state.ChosenRoleId = roleId;
                 state.HasPicked    = true;
-                // If the host is the picker, show their role card now
+                
                 if (state.PlayerId == PlayerControl.LocalPlayer.PlayerId)
                     DraftStatusOverlay.NotifyLocalPlayerPicked(roleId);
             }
@@ -310,7 +310,7 @@ namespace DraftModeTOUM.Patches
         {
             if (AmongUsClient.Instance.AmHost)
             {
-                // Host is the picker — start timer directly
+                
                 DraftManager.NotifyPickerReady(PlayerControl.LocalPlayer.PlayerId);
             }
             else
@@ -324,11 +324,11 @@ namespace DraftModeTOUM.Patches
             }
         }
 
-        /// <summary>
-        /// Called by a non-host client when their heartbeat returns a forcedRole.
-        /// Sends the role name + their own player ID to the host so the host can inject it.
-        /// If we ARE the host, just call DraftManager directly.
-        /// </summary>
+        
+        
+        
+        
+        
         public static void SendForceRoleToHost(string roleName)
         {
             byte myId = PlayerControl.LocalPlayer.PlayerId;
@@ -376,11 +376,11 @@ namespace DraftModeTOUM.Patches
 
         public static void BroadcastDraftEnd()
         {
-            // Host resets locally
+            
             DraftManager.Reset(cancelledBeforeCompletion: true);
             DraftManager.SendChatLocal("<color=#FFD700>Draft has been cancelled by the host.</color>");
 
-            // Broadcast to all clients
+            
             var writer = AmongUsClient.Instance.StartRpcImmediately(
                 PlayerControl.LocalPlayer.NetId,
                 (byte)DraftRpc.EndDraft,
@@ -389,6 +389,7 @@ namespace DraftModeTOUM.Patches
         }
     }
 }
+
 
 
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using Il2CppInterop.Runtime.Attributes;
@@ -13,7 +13,7 @@ using DraftModeTOUM.Managers;
 
 namespace DraftModeTOUM;
 
-// Circle-style draft UI — roles arranged in a spinning wheel
+
 public sealed class DraftCircleMinigame : Minigame
 {
     public Transform? RolesHolder;
@@ -135,11 +135,11 @@ public sealed class DraftCircleMinigame : Minigame
     public override void Close()
     {
         _hasPicked = true;
-        _onPick = null;  // prevent any late callback firing
+        _onPick = null;  
         CurrentCard = -1;
         RoleCount = -1;
 
-        // Clear the full-screen overlay immediately
+        
         try
         {
             if (HudManager.Instance?.FullScreen != null)
@@ -150,9 +150,9 @@ public sealed class DraftCircleMinigame : Minigame
         }
         catch { }
 
-        // Hide immediately then DestroyImmediate so there is no deferred-destroy
-        // window where the GO is still alive but _circleMinigame is already null.
-        // This was causing the circle to stay visible on the last pick.
+        
+        
+        
         try
         {
             gameObject.SetActive(false);
@@ -160,7 +160,7 @@ public sealed class DraftCircleMinigame : Minigame
         }
         catch
         {
-            // Fall back to deferred destroy if DestroyImmediate throws
+            
             try { UnityEngine.Object.Destroy(gameObject); } catch { }
         }
     }
@@ -222,7 +222,7 @@ public sealed class DraftCircleMinigame : Minigame
                     if (_hasPicked) return;
                     _hasPicked = true;
                     var cb = _onPick;
-                    _onPick = null;  // prevent any second invocation
+                    _onPick = null;  
                     cb?.Invoke(capturedIndex);
                 }));
             }
@@ -312,3 +312,4 @@ public sealed class DraftCircleMinigame : Minigame
         return 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f);
     }
 }
+

@@ -1,4 +1,4 @@
-using DraftModeTOUM.Managers;
+﻿using DraftModeTOUM.Managers;
 using HarmonyLib;
 using MiraAPI.GameOptions;
 using Reactor.Utilities;
@@ -8,10 +8,10 @@ using System.Linq;
 
 namespace DraftModeTOUM.Patches
 {
-    /// <summary>
-    /// When DraftManager triggers BeginGame post-draft it sets SkipCountdown=true
-    /// so the game starts immediately instead of waiting 5 seconds.
-    /// </summary>
+    
+    
+    
+    
     [HarmonyPatch(typeof(GameStartManager), nameof(GameStartManager.BeginGame))]
     public static class GameStartManagerCountdownPatch
     {
@@ -24,13 +24,13 @@ namespace DraftModeTOUM.Patches
         }
     }
 
-    /// <summary>
-    /// Intercepts the host pressing Start Game.
-    /// BeginGame is called by GameStartManager.Update() when countDownTimer expires.
-    /// Returning false cancels the real BeginGame and starts the draft instead.
-    /// We delay StartDraft() by one frame so the lobby scene is fully stable
-    /// after BeginGame is cancelled — otherwise HudManager may not be ready.
-    /// </summary>
+    
+    
+    
+    
+    
+    
+    
     [HarmonyPatch(typeof(GameStartManager))]
     public static class BeginGameDraftInterceptPatch
     {
@@ -67,7 +67,7 @@ namespace DraftModeTOUM.Patches
 
             DraftModePlugin.Logger.LogInfo("[DraftIntercept] BeginGame intercepted — starting draft.");
 
-            // Reset the countdown so Update() doesn't call BeginGame again next frame
+            
             __instance.countDownTimer = 10f;
 
             Coroutines.Start(CoStartDraft(__instance));
@@ -76,11 +76,11 @@ namespace DraftModeTOUM.Patches
 
         private static IEnumerator CoStartDraft(GameStartManager gsm)
         {
-            // Wait one frame for the scene to settle after BeginGame was cancelled
+            
             yield return null;
 
-            // Restore a sane timer value so the start button works again
-            // if the draft is cancelled and the host wants to restart
+            
+            
             gsm.countDownTimer = 10f;
 
             DraftManager.SendChatLocal("<color=#FFD700>Draft starting! Wait for your turn to pick a role.</color>");
@@ -88,3 +88,4 @@ namespace DraftModeTOUM.Patches
         }
     }
 }
+

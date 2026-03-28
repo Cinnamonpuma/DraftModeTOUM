@@ -1,4 +1,4 @@
-using BepInEx;
+﻿using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Configuration;
 using BepInEx.Unity.IL2CPP;
@@ -148,8 +148,8 @@ namespace DraftModeTOUM
             bool draftStillInProgress = DraftManager.IsDraftActive;
             DraftManager.Reset(cancelledBeforeCompletion: draftStillInProgress);
 
-            // FIX: Clear HUD refs before ClearLobbyCode so nothing tries to restore
-            // dead lobby-scene GameObjects on the next lobby load.
+            
+            
             DraftStatusOverlay.ClearHudReferences();
             DraftDashboardReporter.ClearLobbyCode();
             DraftModePlugin.Logger.LogInfo($"[DraftModePlugin] Session cleared on disconnect.");
@@ -199,7 +199,7 @@ namespace DraftModeTOUM
         public static void Postfix()
         {
             DraftDashboardReporter.EnsureExists();
-            // FIX: Clear stale HUD refs when returning to main menu
+            
             DraftStatusOverlay.ClearHudReferences();
             DraftModePlugin.Logger.LogInfo("[DraftModePlugin] DashboardReporter ensured from MainMenu.");
         }
@@ -251,3 +251,4 @@ namespace DraftModeTOUM
         }
     }
 }
+

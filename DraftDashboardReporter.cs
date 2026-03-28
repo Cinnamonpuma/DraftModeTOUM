@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Net.Http;
 using System.Text;
@@ -10,11 +10,11 @@ using UnityEngine;
 
 namespace DraftModeTOUM
 {
-    /// <summary>
-    /// Sends heartbeats to the DraftMode PHP dashboard every 3s.
-    /// User ID is read from BepInEx/config/DraftModeTOUM.userid.
-    /// If missing/empty, dashboard integration is disabled until the file exists.
-    /// </summary>
+    
+    
+    
+    
+    
     public class DraftDashboardReporter : MonoBehaviour
     {
         private const string HeartbeatUrl      = "https://mckelanor.xyz/au/draft/admin/api/heartbeat.php";
@@ -32,12 +32,12 @@ namespace DraftModeTOUM
         private static string _pendingForcedRole = null;
         private static string _cachedLobbyCode   = "";
 
-        // FIX: CancellationTokenSource per session so in-flight HTTP tasks are
-        // cancelled immediately on disconnect, preventing them from touching
-        // game state (e.g. _pendingForcedRole) after it has been cleared.
+        
+        
+        
         private static CancellationTokenSource _cts = new CancellationTokenSource();
 
-        // ── Singleton ────────────────────────────────────────────────────────────
+        
 
         public static void EnsureExists()
         {
@@ -58,7 +58,7 @@ namespace DraftModeTOUM
             if (_instance == this) _instance = null;
         }
 
-        // ── Unity loop ───────────────────────────────────────────────────────────
+        
 
         private void Update()
         {
@@ -78,7 +78,7 @@ namespace DraftModeTOUM
             }
         }
 
-        // ── Heartbeat ─────────────────────────────────────────────────────────────
+        
 
         private static void TrySendHeartbeat()
         {
@@ -103,7 +103,7 @@ namespace DraftModeTOUM
                     userId = BuildAnonId();
                 }
 
-                // FIX: Pass the current token so tasks cancel on disconnect
+                
                 var token = _cts.Token;
                 Task.Run(async () => await PostHeartbeat(userId, name, lobbyCode, isHost, hasId, token), token);
             }
@@ -129,29 +129,29 @@ namespace DraftModeTOUM
 
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                // FIX: Use CancellationToken so this request aborts on disconnect
+                
                 using var req = new HttpRequestMessage(HttpMethod.Post, HeartbeatUrl) { Content = content };
                 var resp    = await _http.SendAsync(req, ct);
                 string body = await resp.Content.ReadAsStringAsync();
 
-                DraftModePlugin.Logger.LogInfo($"[DashboardReporter] Heartbeat {resp.StatusCode}");
+                
 
-                // FIX: Only parse response if not cancelled
+                
                 if (!ct.IsCancellationRequested)
                     ParseResponse(body);
             }
             catch (OperationCanceledException)
             {
-                // Normal on disconnect — don't log as error
-                LoggingSystem.Debug("[DashboardReporter] Heartbeat cancelled");
+                
+                
             }
             catch (Exception ex)
             {
-                LoggingSystem.Warning($"[DashboardReporter] Heartbeat failed: {ex.Message}");
+                
             }
         }
 
-        // ── Response ──────────────────────────────────────────────────────────────
+        
 
         private static void ParseResponse(string body)
         {
@@ -174,7 +174,7 @@ namespace DraftModeTOUM
             catch { }
         }
 
-        // ── Forced role ───────────────────────────────────────────────────────────
+        
 
         private static void ApplyForcedRole(string roleName)
         {
@@ -182,13 +182,13 @@ namespace DraftModeTOUM
             {
                 DraftModePlugin.Logger.LogInfo($"[DashboardReporter] Relaying forced role '{roleName}' to host");
                 LoggingSystem.Debug($"[DashboardReporter] Relaying forced role '{roleName}' to host...");
-                // Always go through the RPC helper:
-                // • If this client IS the host → sets it directly on DraftManager
-                // • If this client is NOT the host → sends ForceRole RPC to host
+                
+                
+                
                 DraftModeTOUM.Patches.DraftNetworkHelper.SendForceRoleToHost(roleName);
                 
-                // DO NOT consume here - the role stays in queue until the draft actually uses it
-                // It will be consumed by DraftManager when the draft offer is generated
+                
+                
             }
             catch (Exception ex)
             {
@@ -225,7 +225,7 @@ namespace DraftModeTOUM
             }
         }
 
-        // ── User ID (file-based) ──────────────────────────────────────────────────
+        
 
         private static string GetUserId()
         {
@@ -254,7 +254,7 @@ namespace DraftModeTOUM
             return null;
         }
 
-        // ── Helpers ───────────────────────────────────────────────────────────────
+        
 
         private static bool CanTick()
         {
@@ -278,8 +278,8 @@ namespace DraftModeTOUM
         {
             _cachedLobbyCode = "";
 
-            // FIX: Cancel all in-flight heartbeat tasks and create a fresh token
-            // so no stale callbacks fire after the session ends.
+            
+            
             try
             {
                 _cts.Cancel();
@@ -288,7 +288,7 @@ namespace DraftModeTOUM
             catch { }
             _cts = new CancellationTokenSource();
 
-            // FIX: Also clear any pending forced role from the old session
+            
             _pendingForcedRole = null;
         }
 
@@ -314,3 +314,4 @@ namespace DraftModeTOUM
         }
     }
 }
+

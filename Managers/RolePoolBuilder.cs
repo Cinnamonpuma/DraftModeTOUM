@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using AmongUs.GameOptions;
@@ -10,7 +10,7 @@ namespace DraftModeTOUM.Managers
 {
     public sealed class DraftRolePool
     {
-        // Keyed by RoleTypes cast to ushort — no name strings in the pool at all
+        
         public List<ushort>                    RoleIds    { get; } = new();
         public Dictionary<ushort, int>         MaxCounts  { get; } = new();
         public Dictionary<ushort, int>         Weights    { get; } = new();
@@ -55,8 +55,8 @@ namespace DraftModeTOUM.Managers
                 ? GameData.Instance.AllPlayers.ToArray().Count(p => p != null && !p.Disconnected)
                 : 10;
 
-            // GetPotentialRoles() already filters by game mode, role chances, and count —
-            // use it as the authoritative source instead of re-implementing that logic
+            
+            
             IEnumerable<RoleBehaviour> roles;
             try
             {
@@ -89,8 +89,8 @@ namespace DraftModeTOUM.Managers
                 int chance = roleOptions.GetChancePerGame(role.Role);
                 if (count <= 0 || chance <= 0) continue;
 
-                // Cap count against player count so we never offer a role
-                // more times than there are players who could receive it
+                
+                
                 int cappedCount = Math.Min(count, playerCount);
 
                 var faction = role.IsImpostor
@@ -145,3 +145,4 @@ namespace DraftModeTOUM.Managers
         }
     }
 }
+

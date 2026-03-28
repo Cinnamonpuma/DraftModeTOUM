@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using DraftModeTOUM.Managers;
@@ -36,16 +36,16 @@ namespace DraftModeTOUM
             _    => 0.55f,
         };
 
-        // Spacing (in layout group units) between card edges — negative = overlap
-        // For grid mode (>5 cards) this is used for both X and Y (Y halved)
+        
+        
         private static float SpacingForCount(int count) => count switch
         {
             <= 3 => -1f,
             <= 4 => -1f,
             <= 5 => -1f,
-            <= 6 => 0f,   // grid: 2 rows of 3, more breathing room
-            <= 8 => 0f,  // grid: 2 rows of 4
-            _    => 0f,   // grid: 2 rows of 5+
+            <= 6 => 0f,   
+            <= 8 => 0f,  
+            _    => 0f,   
         };
 
         private static Color GetTeamColor(string teamName)
@@ -60,7 +60,7 @@ namespace DraftModeTOUM
 
     return Color.white;
 }
-        // ── Public API ────────────────────────────────────────────────────────────
+        
 
         public static void Show(ushort[] roleIds)
         {
@@ -95,7 +95,7 @@ namespace DraftModeTOUM
             Instance = null;
         }
 
-        // ── Build ─────────────────────────────────────────────────────────────────
+        
 
         private void BuildScreen()
         {
@@ -135,7 +135,7 @@ namespace DraftModeTOUM
             var statusGo    = _screenRoot.transform.Find("Status");
             var rolesHolder = _screenRoot.transform.Find("Roles");
 
-            // Status text
+            
             if (statusGo != null)
             {
                 _statusText = statusGo.GetComponent<TextMeshPro>();
@@ -155,7 +155,7 @@ namespace DraftModeTOUM
 
             var rolePrefab = holderGo.gameObject;
 
-            // Build card data via shared pipeline
+            
             var idList = new List<ushort>();
             if (_offeredRoleIds != null) idList.AddRange(_offeredRoleIds);
             var cards = DraftUiManager.BuildCards(idList);
@@ -168,17 +168,17 @@ namespace DraftModeTOUM
 
             if (useGrid)
             {
-                // Disable the layout group entirely — we'll position cards manually
+                
                 var hLayout = rolesHolder?.GetComponent<UnityEngine.UI.HorizontalLayoutGroup>();
                 if (hLayout != null) hLayout.enabled = false;
 
-                // Expand the Roles holder vertically so both rows are visible
+                
                 var rt = rolesHolder?.GetComponent<RectTransform>();
                 if (rt != null) rt.sizeDelta = new Vector2(rt.sizeDelta.x, 12f);
             }
             else
             {
-                // Single row — just override HorizontalLayoutGroup spacing
+                
                 var layoutGroup = rolesHolder?.GetComponent<UnityEngine.UI.HorizontalLayoutGroup>();
                 if (layoutGroup != null)
                     layoutGroup.spacing = spacing;
@@ -203,7 +203,7 @@ namespace DraftModeTOUM
             Coroutines.Start(CoAnimateCards(rolesHolder, cardScale, useGrid, totalCards));
         }
 
-        // ── Card factory ──────────────────────────────────────────────────────────
+        
 
         private static PassiveButton CreateCard(
             GameObject rolePrefab,
@@ -226,14 +226,14 @@ namespace DraftModeTOUM
             var passiveButton = actualCard.GetComponent<PassiveButton>();
             var rollover      = actualCard.GetComponent<ButtonRolloverHandler>();
 
-            // In grid mode tilt per column, otherwise per global index
-            // so bottom row cards don't inherit extreme rotation from high cardIndex
+            
+            
             int   tiltIndex = useGrid ? (cardIndex % Mathf.CeilToInt(totalCards / 2f)) : cardIndex;
             float tiltScale = Mathf.Lerp(1f, 0.25f, Mathf.InverseLerp(3f, 9f, totalCards));
             float randZ     = (-10f + tiltIndex * 5f) * tiltScale
                               + UnityEngine.Random.Range(-1.5f, 1.5f) * tiltScale;
 
-            // Hover: push forward in Z — same feel as TOU
+            
             passiveButton.OnMouseOver.AddListener((UnityAction)(() =>
             {
                 var pos = newRoleObj.transform.localPosition;
@@ -249,21 +249,21 @@ namespace DraftModeTOUM
 
             if (useGrid)
             {
-                // 2-row manual layout: split into top and bottom rows
+                
                 int cols    = Mathf.CeilToInt(totalCards / 2f);
                 int row     = cardIndex / cols;
                 int col     = cardIndex % cols;
 
-                // Card width/height in world units at chosen scale
+                
                 float cardW = 2.5f * cardScale;
                 float cardH = 3.7f * cardScale;
                 float xGap  = cardW + spacing;
                 float yGap  = cardH + spacing * 0.5f;
 
-                // Centre the grid horizontally
+                
                 float totalW = cols * xGap - spacing;
                 float startX = -totalW / 2f + cardW / 2f;
-                // Row 0 = top, Row 1 = bottom
+                
                 float startY = yGap / 2f;
 
                 float xPos = startX + col * xGap;
@@ -273,7 +273,7 @@ namespace DraftModeTOUM
             }
             else
             {
-                // X managed by HorizontalLayoutGroup
+                
                 newRoleObj.transform.localPosition = new Vector3(
                     newRoleObj.transform.localPosition.x, 0f, cardIndex);
             }
@@ -288,8 +288,8 @@ namespace DraftModeTOUM
             if (cardBgRenderer != null) cardBgRenderer.color = color;
             roleImage.color = Color.white;
 
-            // Team text: shrink font cap so it fits on smaller cards
-            // Prefab sets fontSizeMax=4; we reduce it proportionally
+            
+            
             teamText.fontSizeMax = Mathf.Lerp(4f, 2f, Mathf.InverseLerp(3f, 9f, totalCards));
             teamText.enableAutoSizing = true;
 
@@ -302,14 +302,14 @@ namespace DraftModeTOUM
             return passiveButton;
         }
 
-        // ── Animation ─────────────────────────────────────────────────────────────
+        
 
         private static IEnumerator CoAnimateCards(Transform rolesHolder, float cardScale, bool useGrid, int totalCards)
         {
             if (rolesHolder == null) yield break;
             int cols = Mathf.CeilToInt(totalCards / 2f);
-            // Use index loop — IL2CPP Transform enumerator crashes if children are
-            // destroyed during iteration, and the cast path is also unstable.
+            
+            
             for (int i = 0; i < rolesHolder.childCount; i++)
             {
                 Transform card = rolesHolder.GetChild(i);
@@ -323,14 +323,14 @@ namespace DraftModeTOUM
                 catch (Exception bex) { DraftModePlugin.Logger.LogWarning($"[DraftScreen] BetterBloop failed: {bex.Message}"); }
                 yield return new WaitForSeconds(0.08f);
             }
-            // Signal that all cards are shown — start the timer now
+            
             if (Instance != null) Instance._cardsReady = true;
             DraftNetworkHelper.NotifyPickerReady();
         }
 
         private static IEnumerator CoAnimateCardIn(Transform card, int currentCard)
         {
-            // Slide in from below — identical math to TOU, just smaller randY offset
+            
             float randY = (currentCard * currentCard * 0.5f - currentCard) * 0.05f
                           + UnityEngine.Random.Range(-0.08f, 0f);
             float randZ = -10f + currentCard * 5f + UnityEngine.Random.Range(-1.5f, 0f);
@@ -358,7 +358,7 @@ namespace DraftModeTOUM
             card.localRotation = Quaternion.Euler(0f, 0f, -randZ);
         }
 
-        // ── Timer ─────────────────────────────────────────────────────────────────
+        
 
         private float _localTimeLeft = -1f;
         private bool  _cardsReady    = false;
@@ -388,7 +388,7 @@ namespace DraftModeTOUM
                 $"{secs} Second{(secs != 1 ? "s" : "")} Remain</color>";
         }
 
-        // ── Pick ──────────────────────────────────────────────────────────────────
+        
 
         private void OnCardClicked(int index)
         {
@@ -401,3 +401,4 @@ namespace DraftModeTOUM
         private void DestroySelf() => Hide();
     }
 }
+

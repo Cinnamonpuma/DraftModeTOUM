@@ -4,9 +4,9 @@ using InnerNet;
 
 namespace DraftModeTOUM.Patches
 {
-    /// <summary>
-    /// Kicks any player who joins the lobby after a draft has started.
-    /// </summary>
+    
+    
+    
     [HarmonyPatch(typeof(AmongUsClient), nameof(AmongUsClient.OnPlayerJoined))]
     public static class KickOnJoinWhileLockedPatch
     {

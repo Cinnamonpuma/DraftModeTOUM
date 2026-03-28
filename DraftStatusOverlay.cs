@@ -1,4 +1,4 @@
-using Reactor.Utilities.Attributes;
+﻿using Reactor.Utilities.Attributes;
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
@@ -45,7 +45,7 @@ namespace DraftModeTOUM
 
         public DraftStatusOverlay(System.IntPtr ptr) : base(ptr) { }
 
-        // ── Singleton ─────────────────────────────────────────────────────────────
+        
 
         public static void EnsureExists()
         {
@@ -98,7 +98,7 @@ namespace DraftModeTOUM
             _instance._cachedPickerCount = -1;
         }
 
-        // ── Unity lifecycle ───────────────────────────────────────────────────────
+        
 
         private void Awake()
         {
@@ -113,7 +113,7 @@ namespace DraftModeTOUM
             if (_instance == this) _instance = null;
         }
 
-        // ── UI construction ───────────────────────────────────────────────────────
+        
 
         private void BuildUI()
         {
@@ -158,7 +158,7 @@ namespace DraftModeTOUM
             _root.SetActive(false);
         }
 
-        // ── Prefab loading ────────────────────────────────────────────────────────
+        
 
         private static bool EnsureRolePrefab()
         {
@@ -181,7 +181,7 @@ namespace DraftModeTOUM
             }
         }
 
-        // ── Role card ─────────────────────────────────────────────────────────────
+        
 
         private void ShowRoleCard(ushort roleId)
         {
@@ -227,7 +227,7 @@ namespace DraftModeTOUM
             if (rollover != null) { rollover.OutColor = color; rollover.OverColor = Color.white; }
             if (roleText != null) roleText.color  = color;
 
-            // Sorting orders — keep below the wiki which renders at high order
+            
             foreach (var tmp in _roleCardNewRoleObj.GetComponentsInChildren<TMPro.TMP_Text>())
             {
                 var r = tmp.GetComponent<Renderer>();
@@ -239,7 +239,7 @@ namespace DraftModeTOUM
                 sr.sortingOrder     = 1;
             }
 
-            // Collider
+            
             var col = actualCard.GetComponent<Collider2D>() as Collider2D
                    ?? actualCard.GetComponent<BoxCollider2D>() as Collider2D;
             if (col == null)
@@ -276,7 +276,7 @@ namespace DraftModeTOUM
             Coroutines.Start(CoPopInCard(_roleCardNewRoleObj.transform));
         }
 
-        // ── Wiki open/close ───────────────────────────────────────────────────────
+        
 
         private void OpenWiki(ushort roleId)
         {
@@ -289,8 +289,8 @@ namespace DraftModeTOUM
                     return;
                 }
 
-                // Hide the card entirely while the wiki is open so it can't
-                // visually overlap or intercept clicks regardless of render path.
+                
+                
                 if (_roleCardNewRoleObj != null)
                     _roleCardNewRoleObj.SetActive(false);
 
@@ -298,15 +298,15 @@ namespace DraftModeTOUM
                 wiki.Begin(null);
                 wiki.OpenFor(wikiTarget);
 
-                // IngameWikiMinigame is a Minigame — it gets Destroy()'d when
-                // closed, not just deactivated. Poll for null (destroyed) not
-                // for activeSelf (never goes false on a destroyed object).
+                
+                
+                
                 Coroutines.Start(CoWaitForWikiDestroyed(wiki));
             }
             catch (System.Exception ex)
             {
                 DraftModePlugin.Logger.LogWarning($"[DraftStatusOverlay] Wiki open failed: {ex.Message}");
-                // Always restore the card even if wiki creation failed
+                
                 if (_roleCardNewRoleObj != null)
                     _roleCardNewRoleObj.SetActive(true);
             }
@@ -314,17 +314,17 @@ namespace DraftModeTOUM
 
         private IEnumerator CoWaitForWikiDestroyed(TownOfUs.Modules.Wiki.IngameWikiMinigame wiki)
         {
-            // IL2CPP objects become null when Destroy()'d — this is the correct
-            // way to detect a Minigame closing, NOT checking activeSelf.
+            
+            
             while (wiki != null)
                 yield return null;
 
-            // Wiki is gone — show the card again
+            
             if (_roleCardNewRoleObj != null)
                 _roleCardNewRoleObj.SetActive(true);
         }
 
-        // ── Helpers ───────────────────────────────────────────────────────────────
+        
 
         private void DestroyRoleCard()
         {
@@ -364,7 +364,7 @@ namespace DraftModeTOUM
             return Color.white;
         }
 
-        // ── Update ────────────────────────────────────────────────────────────────
+        
 
         private void Update()
         {
@@ -527,3 +527,4 @@ namespace DraftModeTOUM
         }
     }
 }
+

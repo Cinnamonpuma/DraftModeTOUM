@@ -1,4 +1,4 @@
-using MiraAPI.Roles;
+﻿using MiraAPI.Roles;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -29,25 +29,25 @@ namespace DraftModeTOUM.Managers
                 "Chef", "Inquisitor"
             };
 
-        /// <summary>
-        /// Resolve faction from a live RoleBehaviour.
-        /// IsImpostor is a property on RoleBehaviour.
-        /// Neutral detection goes through ICustomRole.Team since RoleBehaviour
-        /// has no IsNeutral member — this matches how TraitorSelectionMinigame does it.
-        /// </summary>
+        
+        
+        
+        
+        
+        
         public static RoleFaction GetFactionFromRole(RoleBehaviour role)
         {
             if (role == null) return RoleFaction.Crewmate;
 
-            // IsImpostor is a bool property on RoleBehaviour
+            
             if (role.IsImpostor) return RoleFaction.Impostor;
 
-            // Neutral team check via ICustomRole.Team (same approach as TOU source)
+            
             if (role is ICustomRole customRole &&
                 customRole.Team != ModdedRoleTeams.Crewmate &&
                 customRole.Team != ModdedRoleTeams.Impostor)
             {
-                // Distinguish neutral killing vs neutral passive by NiceName
+                
                 string normalized = Normalize(role.NiceName);
                 if (NeutralKillingRoles.Contains(normalized)) return RoleFaction.NeutralKilling;
                 return RoleFaction.Neutral;
@@ -56,16 +56,16 @@ namespace DraftModeTOUM.Managers
             return RoleFaction.Crewmate;
         }
 
-        /// <summary>
-        /// String-based fallback — used only when a live RoleBehaviour isn't available.
-        /// </summary>
+        
+        
+        
         public static RoleFaction GetFaction(string roleName)
         {
             string normalized = Normalize(roleName);
             if (NeutralKillingRoles.Contains(normalized)) return RoleFaction.NeutralKilling;
             if (NeutralOtherRoles.Contains(normalized))   return RoleFaction.Neutral;
 
-            // Try to resolve via RoleManager
+            
             if (RoleManager.Instance != null)
             {
                 foreach (var r in RoleManager.Instance.AllRoles.ToArray())
@@ -89,3 +89,4 @@ namespace DraftModeTOUM.Managers
             (s ?? string.Empty).Replace(" ", "").Replace("-", "");
     }
 }
+
