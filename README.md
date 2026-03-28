@@ -28,7 +28,7 @@ A [BepInEx](https://github.com/BepInEx/BepInEx) mod for **Among Us** running [To
 
 ### Starting a Draft
 
-Only the **host** can start a draft. Once everyone is in the lobby, the host types in chat:
+Only the **host** can start a draft. Once everyone is in the lobby, the host can either press the **Start** button (auto-starts the draft) or type in chat:
 
 ```
 /draft
@@ -38,13 +38,14 @@ This kicks off the draft sequence:
 
 1. Each player is assigned a random **slot number** (their turn order).
 2. The role pool is built from the host's current TOUM role settings.
-3. Players pick one at a time in slot order.
+3. Players pick in slot order. The host can allow **1 or 2** players to pick at the same time via the Concurrent Picks setting.
 
 ---
 
 ### Taking Your Turn
 
-When it's your turn, a role picker UI will appear. Choose one of the offered roles — or pick **Random** to be assigned any available role from the pool. Other players will see a waiting screen showing who is currently picking.
+When it's your turn, a role picker UI will appear. Choose one of the offered roles - or pick **Random** to be 
+assigned any available role from the pool. Other players will see a waiting screen showing who is currently picking. If concurrent picks are enabled, the waiting screen shows **MULTI** while more than one player is picking.
 
 If the timer runs out before you pick, a random role is automatically assigned and the draft moves on.
 
@@ -76,7 +77,12 @@ The host can configure Draft Mode from the **Mira settings menu** in the lobby. 
 
 ![Draft Mode Settings](screenshots/Settings.png)
 
-
+Key settings:
+- Offered Roles Per Turn
+- Concurrent Picks Per Turn (1 or 2)
+- Turn Duration
+- Auto-start After Draft
+- Show Draft Recap
 ---
 
 ## Draft Recap
@@ -137,3 +143,5 @@ Faction caps (Max Impostors, Max Neutral Killings, Max Neutral Other) are applie
 ## License
 
 MIT
+
+
