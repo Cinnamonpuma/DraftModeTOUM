@@ -654,4 +654,10 @@
         <EmbeddedResource Include="DraftLogo.png"/>
     </ItemGroup>
 
+  <!-- Safety: never compile generated obj/bin sources from nested folders -->
+  <ItemGroup>
+    <Compile Remove="**\obj\**\*.cs" />
+    <Compile Remove="**\bin\**\*.cs" />
+  </ItemGroup>
+
 </Project>

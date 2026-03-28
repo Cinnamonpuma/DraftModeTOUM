@@ -119,6 +119,18 @@ namespace DraftModeTOUM.Managers
         public static List<PlayerDraftState> GetActivePickerStates()
         {
             var list = new List<PlayerDraftState>();
+
+            // On clients, _activeSlots isn't populated. Use IsPickingNow flags instead.
+            if (_activeSlots == null || _activeSlots.Count == 0)
+            {
+                foreach (var s in _slotMap.Values)
+                {
+                    if (s != null && s.IsPickingNow && !s.HasPicked)
+                        list.Add(s);
+                }
+                return list;
+            }
+
             foreach (var slot in _activeSlots)
             {
                 var s = GetStateForSlot(slot);
@@ -1021,7 +1033,7 @@ namespace DraftModeTOUM.Managers
             LockLobbyOnDraftStart = opts.LockLobbyOnDraftStart;
             UseRoleChances        = opts.UseRoleChances;
             OfferedRolesCount     = Mathf.Clamp(Mathf.RoundToInt(opts.OfferedRolesCount), 1, 9);
-            ConcurrentPickCount   = Mathf.Clamp(Mathf.RoundToInt(opts.ConcurrentPicks), 1, 5);
+            ConcurrentPickCount   = Mathf.Clamp(Mathf.RoundToInt(opts.ConcurrentPicks), 1, 2);
             ShowRandomOption      = opts.ShowRandomOption;
             MaxImpostors          = Mathf.Clamp(Mathf.RoundToInt(opts.MaxImpostors), 0, 10);
             MaxNeutralKillings    = Mathf.Clamp(Mathf.RoundToInt(opts.MaxNeutralKillings), 0, 10);
