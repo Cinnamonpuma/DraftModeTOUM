@@ -6,7 +6,7 @@
     <Nullable>disable</Nullable>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Version>1.0.6</Version>
+    <Version>1.0.6-bugfix</Version>
   </PropertyGroup>
 
   <!-- Local DLLs — drop MiraAPI.dll and TownOfUsMira.dll into the libs\folder -->
