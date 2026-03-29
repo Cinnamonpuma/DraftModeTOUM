@@ -68,6 +68,7 @@ namespace DraftModeTOUM.Managers
         private static readonly HashSet<ushort> _roundChosenRoles   = new();
         private static readonly HashSet<byte>   _roundReadyPickers  = new();
         private static bool _suppressAdvance = false;
+        private static readonly Dictionary<int, HashSet<RoleFaction>> _roundAllowedFactions = new();
 
         public static readonly Dictionary<byte, RoleTypes> PendingRoleAssignments = new();
         private static readonly HashSet<byte>              _appliedPlayers        = new();
@@ -543,6 +544,7 @@ namespace DraftModeTOUM.Managers
             _roundChosenRoles.Clear();
             _roundReadyPickers.Clear();
             _activeSlots = GetNextActiveSlots();
+            BuildRoundFactionAllowList();
 
             if (_activeSlots.Count == 0)
             {
@@ -605,6 +607,57 @@ namespace DraftModeTOUM.Managers
             return result;
         }
 
+        private static void BuildRoundFactionAllowList()
+        {
+            _roundAllowedFactions.Clear();
+            if (_activeSlots == null || _activeSlots.Count <= 1) return;
+
+            foreach (var slot in _activeSlots)
+                _roundAllowedFactions[slot] = new HashSet<RoleFaction>();
+
+            int remainingImp = Mathf.Max(0, MaxImpostors - _impostorsDrafted);
+            int remainingNK  = Mathf.Max(0, MaxNeutralKillings - _neutralKillingsDrafted);
+            int remainingNP  = Mathf.Max(0, MaxNeutralPassives - _neutralPassivesDrafted);
+
+            AllocateRoundFaction(RoleFaction.Impostor, remainingImp);
+            AllocateRoundFaction(RoleFaction.NeutralKilling, remainingNK);
+            AllocateRoundFaction(RoleFaction.Neutral, remainingNP);
+        }
+
+        private static void AllocateRoundFaction(RoleFaction faction, int remaining)
+        {
+            if (remaining <= 0) return;
+            var slots = new List<int>(_activeSlots);
+            var prioritized = slots
+                .Where(slot => GetStateForSlot(slot)?.GuaranteedFaction == faction)
+                .ToList();
+            var others = slots
+                .Where(slot => !prioritized.Contains(slot))
+                .OrderBy(_ => UnityEngine.Random.value)
+                .ToList();
+            var ordered = prioritized.Concat(others).ToList();
+            int count = Mathf.Min(remaining, ordered.Count);
+            for (int i = 0; i < count; i++)
+                _roundAllowedFactions[ordered[i]].Add(faction);
+        }
+
+        private static List<ushort> FilterAvailableForRound(PlayerDraftState state, List<ushort> ids)
+        {
+            if (state == null || ids == null) return ids ?? new List<ushort>();
+            if (_roundAllowedFactions.Count == 0) return ids;
+
+            if (!_roundAllowedFactions.TryGetValue(state.SlotNumber, out var allowed) || allowed.Count == 0)
+            {
+                return ids.Where(id => GetFaction(id) == RoleFaction.Crewmate).ToList();
+            }
+
+            return ids.Where(id =>
+            {
+                var f = GetFaction(id);
+                return f == RoleFaction.Crewmate || allowed.Contains(f);
+            }).ToList();
+        }
+
         private static List<ushort> BuildOfferForState(PlayerDraftState state, HashSet<ushort> reserved)
         {
             int target = OfferedRolesCount;
@@ -622,6 +675,7 @@ namespace DraftModeTOUM.Managers
                     $"[DraftManager] Injecting forced card '{forcedName}' for slot {state.SlotNumber}");
 
                 var available2 = GetAvailableIds(reserved);
+                available2 = FilterAvailableForRound(state, available2);
                 var offered2   = new List<ushort> { forcedId };
                 var fill       = available2.Where(id => id != forcedId).ToList();
                 offered2.AddRange(PickWeightedUnique(fill, Math.Max(0, OfferedRolesCount - 1)));
@@ -639,6 +693,7 @@ namespace DraftModeTOUM.Managers
             }
 
             var available = GetAvailableIds(reserved);
+            available = FilterAvailableForRound(state, available);
             var offered   = new List<ushort>();
 
             if (available.Count > 0)

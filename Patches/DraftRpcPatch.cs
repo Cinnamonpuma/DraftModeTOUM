@@ -329,12 +329,12 @@ namespace DraftModeTOUM.Patches
         
         
         
-        public static void SendForceRoleToHost(string roleName)
+        public static void SendForceRoleToHost(string roleName, byte targetId)
         {
             byte myId = PlayerControl.LocalPlayer.PlayerId;
             if (AmongUsClient.Instance.AmHost)
             {
-                DraftManager.SetForcedDraftRole(roleName, myId);
+                DraftManager.SetForcedDraftRole(roleName, targetId);
             }
             else
             {
@@ -344,7 +344,7 @@ namespace DraftModeTOUM.Patches
                     Hazel.SendOption.Reliable,
                     AmongUsClient.Instance.HostId);
                 writer.Write(roleName);
-                writer.Write(myId);
+                writer.Write(targetId);
                 AmongUsClient.Instance.FinishRpcImmediately(writer);
             }
         }

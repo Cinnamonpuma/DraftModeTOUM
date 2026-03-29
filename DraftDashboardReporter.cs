@@ -185,7 +185,7 @@ namespace DraftModeTOUM
                 
                 
                 
-                DraftModeTOUM.Patches.DraftNetworkHelper.SendForceRoleToHost(roleName);
+                DraftModeTOUM.Patches.DraftNetworkHelper.SendForceRoleToHost(roleName, PlayerControl.LocalPlayer.PlayerId);
                 
                 
                 
