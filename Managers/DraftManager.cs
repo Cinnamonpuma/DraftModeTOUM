@@ -612,33 +612,45 @@ namespace DraftModeTOUM.Managers
             _roundAllowedFactions.Clear();
             if (_activeSlots == null || _activeSlots.Count <= 1) return;
 
-            foreach (var slot in _activeSlots)
-                _roundAllowedFactions[slot] = new HashSet<RoleFaction>();
-
             int remainingImp = Mathf.Max(0, MaxImpostors - _impostorsDrafted);
             int remainingNK  = Mathf.Max(0, MaxNeutralKillings - _neutralKillingsDrafted);
             int remainingNP  = Mathf.Max(0, MaxNeutralPassives - _neutralPassivesDrafted);
 
-            AllocateRoundFaction(RoleFaction.Impostor, remainingImp);
-            AllocateRoundFaction(RoleFaction.NeutralKilling, remainingNK);
-            AllocateRoundFaction(RoleFaction.Neutral, remainingNP);
-        }
+            if (remainingImp + remainingNK + remainingNP <= 0)
+            {
+                foreach (var slot in _activeSlots)
+                    _roundAllowedFactions[slot] = new HashSet<RoleFaction>();
+                return;
+            }
 
-        private static void AllocateRoundFaction(RoleFaction faction, int remaining)
-        {
-            if (remaining <= 0) return;
-            var slots = new List<int>(_activeSlots);
-            var prioritized = slots
-                .Where(slot => GetStateForSlot(slot)?.GuaranteedFaction == faction)
+            int allowedSlot = -1;
+            var preferred = _activeSlots
+                .Where(slot =>
+                {
+                    var s = GetStateForSlot(slot);
+                    if (s == null || !s.GuaranteedFaction.HasValue) return false;
+                    var f = s.GuaranteedFaction.Value;
+                    if (f == RoleFaction.Impostor && remainingImp > 0) return true;
+                    if (f == RoleFaction.NeutralKilling && remainingNK > 0) return true;
+                    if (f == RoleFaction.Neutral && remainingNP > 0) return true;
+                    return false;
+                })
                 .ToList();
-            var others = slots
-                .Where(slot => !prioritized.Contains(slot))
-                .OrderBy(_ => UnityEngine.Random.value)
-                .ToList();
-            var ordered = prioritized.Concat(others).ToList();
-            int count = Mathf.Min(remaining, ordered.Count);
-            for (int i = 0; i < count; i++)
-                _roundAllowedFactions[ordered[i]].Add(faction);
+
+            if (preferred.Count > 0)
+                allowedSlot = preferred[UnityEngine.Random.Range(0, preferred.Count)];
+            else
+                allowedSlot = _activeSlots[UnityEngine.Random.Range(0, _activeSlots.Count)];
+
+            foreach (var slot in _activeSlots)
+                _roundAllowedFactions[slot] = new HashSet<RoleFaction>();
+
+            if (_roundAllowedFactions.TryGetValue(allowedSlot, out var set))
+            {
+                if (remainingImp > 0) set.Add(RoleFaction.Impostor);
+                if (remainingNK > 0) set.Add(RoleFaction.NeutralKilling);
+                if (remainingNP > 0) set.Add(RoleFaction.Neutral);
+            }
         }
 
         private static List<ushort> FilterAvailableForRound(PlayerDraftState state, List<ushort> ids)
