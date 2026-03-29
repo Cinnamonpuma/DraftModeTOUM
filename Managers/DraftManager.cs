@@ -192,6 +192,7 @@ namespace DraftModeTOUM.Managers
             _roundOfferReserved.Clear();
             _roundChosenRoles.Clear();
             _roundReadyPickers.Clear();
+            DraftAudio.PlayDraftStartCue();
             DraftStatusOverlay.SetState(OverlayState.Waiting);
         }
 
