@@ -1,8 +1,8 @@
 <p align="center">
   <img src="screenshots/logo-banner.png" alt="DraftModeTOUM" width="700"/>
 </p>
-# THIS REPOSITORY IS OUTDATED USE THE UPDATED REPOSITORY [HERE](https://github.com/ninja-au/DraftModeTOUM/)
-
+# THIS REPOSITORY IS OUTDATED USE THE UPDATED REPOSITORY HERE 
+https://github.com/ninja-au/DraftModeTOUM/
 ---
 
 ## Requirements
